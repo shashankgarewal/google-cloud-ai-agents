@@ -22,3 +22,18 @@ dedication service account for isolated iam role
 # Grant the "Vertex AI User" (roles/aiplatform.user) role to your service account
 `gcloud projects add-iam-policy-binding $PROJECT_ID --member="serviceAccount:$SERVICE_ACCOUNT" --role="roles/aiplatform.user"`
 
+<!-- ------------------------------- Deploy -------------------------------- -->
+Single command that build container image, push to artifact registry, and launch service on cloud run.
+
+```bash
+uvx --from google-adk==1.14.0 \
+adk deploy cloud_run \
+  --project=$PROJECT_ID \
+  --region=europe-west1 \
+  --service_name=zoo-tour-guide \
+  --with_ui \
+  . \
+  -- \
+  --labels=dev-tutorial=codelab-adk \
+  --service-account=$SERVICE_ACCOUNT
+```
