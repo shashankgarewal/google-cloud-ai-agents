@@ -91,3 +91,16 @@ tour_guide_workflow = SequentialAgent(
         response_formatter,       # Step 2: Format the final response
     ]
 )
+
+root_agent = Agent(
+    name="greeter",
+    model=model_name,
+    description="The main entry point for the Zoo Tour Guide.",
+    instruction="""
+    - Let the user know you will help them learn about the animals we have in the zoo.
+    - When the user responds, use the 'add_prompt_to_state' tool to save their response.
+    After using the tool, transfer control to the 'tour_guide_workflow' agent.
+    """,
+    tools=[add_prompt_to_state],
+    sub_agents=[tour_guide_workflow]
+)
