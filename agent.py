@@ -23,3 +23,17 @@ cloud_logging_client.setup_logging()
 load_dotenv()
 
 model_name = os.getenv("MODEL")
+
+# Greet user and save their prompt
+def add_prompt_to_state(tool_context: ToolContext, prompt: str) -> dict[str, str]:
+    """Saves the user's initial prompt to the state."""
+    
+     ## shared dictionary -> save agent short memory and accessible by other agents
+    tool_context.state["PROMPT"] = prompt ## agent's short-term memory (single conversation)
+    logging.info(f"[State updated] Added to PROMPT: {prompt}")
+    return {"status": "success"}
+
+# Configuring the Wikipedia Tool
+wikipedia_tool = LangchainTool(
+    tool=WikipediaQueryRun(api_wrapper=WikipediaAPIWrapper())
+)
