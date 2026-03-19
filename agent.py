@@ -82,3 +82,12 @@ response_formatter = Agent(
     { research_data }
     """
 )
+
+tour_guide_workflow = SequentialAgent(
+    name="tour_guide_workflow",
+    description="The main workflow for handling a user's request about an animal.",
+    sub_agents=[
+        comprehensive_researcher, # Step 1: Gather all data
+        response_formatter,       # Step 2: Format the final response
+    ]
+)
