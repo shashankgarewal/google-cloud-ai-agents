@@ -12,6 +12,10 @@ __pycache__/
 venv/
 .env/
 
+# Production Configuration
+.env
+.env.*
+
 # OS files
 .DS_Store
 Thumbs.db
