@@ -24,3 +24,8 @@ Thumbs.db
 .Python
 build/
 *.egg-info/
+
+# --- Google ADK & AI ---
+.adk/
+.env
+agent_metadata.json
