@@ -63,9 +63,40 @@ It's best to name agents folder with underscore `_`, given google adk [faced iss
 
 6. The Project IDs are globally unique across **all GCP users and organizations**, similar to how domain names work on the internet or username in linkedin.
 
+7. The service account automatically binds with active/default project configured at the momemnt of creating service account. 
+      
+      ![service account creation failed when no project is set](sa_fail_no_projectID.png)
+
+
 ## General
 1. Not all AI services are available in every region — `us-central1` has the broadest coverage.
 
+2. APIs are enabled at the project level, while roles and permissions to use those APIs are granted at the service account level.
+
+3. The app (the deployd code) is different from the project. The project is the infrastructure wrapper — the app is the code running inside it.
+   
+   **Cloud Hierarchy**
+   ```bash
+      Organization (optional, company level)
+      └── Folder (optional, team/env grouping)
+            └── Cloud Project
+                  └── Billing Account
+                        └── Link a billing account to project
+                  └── APIs enabled (e.g. aiplatform.googleapis.com)
+                  └── Service Account 
+                        └── Roles granted by project (e.g. aiplatform.user)
+                  └── Cloud Run / Compute Engine
+                        └── Your App (code) deployed here
+                        └── Service Account attached at deployment
+   ```
+   **App Workflow**
+   ```bash
+      The App makes an API call
+         → Cloud Run uses the attached service account
+            → service account has roles granted by the project
+               → project has the API enabled
+                  → call succeeds ✅
+   ```
 
 # Projects 
 | Project | Concepts Learned | Codelab |
