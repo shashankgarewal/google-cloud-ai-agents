@@ -101,5 +101,5 @@ It's best to name agents folder with underscore `_`, given google adk [faced iss
 # Projects 
 | Project | Concepts Learned | Codelab |
 |---|---|---|
-| [`hello_agent`](./hello_agent) | ADK basics, project setup, venv | [↗](https://codelabs.developers.google.com/devsite/codelabs/build-agents-with-adk-foundation) |
-| [`sequential_agent_deployed`](./sequential_agent_deployed) | Sequential agents, state sharing, Cloud Run | [↗](https://codelabs.developers.google.com/codelabs/production-ready-ai-with-gc/5-deploying-agents/deploy-an-adk-agent-to-cloud-run) |
+| [`hello_agent`](./hello_agent) | ADK basics, project setup, venv | [Live](https://codelabs.developers.google.com/devsite/codelabs/build-agents-with-adk-foundation) / [archive](https://web.archive.org/web/20260324113305/https://codelabs.developers.google.com/devsite/codelabs/build-agents-with-adk-empowering-with-tools) |
+| [`sequential_agent_deployed`](./sequential_agent_deployed) | Sequential agents, state sharing, Cloud Run | [Live](https://codelabs.developers.google.com/codelabs/production-ready-ai-with-gc/5-deploying-agents/deploy-an-adk-agent-to-cloud-run) / [archive](https://web.archive.org/web/20260324113659/https://codelabs.developers.google.com/codelabs/production-ready-ai-with-gc/5-deploying-agents/deploy-an-adk-agent-to-cloud-run)|
