@@ -1,7 +1,6 @@
 import os
 import requests
 from dotenv import load_dotenv
-from .mcp_tools import get_distance
 from pydantic import BaseModel, Field
 from typing import List
 
@@ -35,9 +34,10 @@ def _build_params(crop: str, state: str, district: str, mandi: str, extra_filter
     params = {
         "api-key": api_key,
         "format": "json",
-        "filters[commodity]": crop,
     }
-
+    
+    if crop:
+        params["filters[commodity]"] = crop
     if state:
         params["filters[state.keyword]"] = state
     if district:
@@ -80,9 +80,3 @@ def get_mandi_prices(crop: str, state: str = None, district: str = None, mandi: 
         return ErrorResponse(error=str(e))
 
     return MandiResponse(records=records)
-
-def estimate_transport_cost(from_farmer: str, to_mandi: str):
-    distance = get_distance(from_farmer, to_mandi)
-    
-    cost_per_km = 10  # simple assumption
-    return distance * cost_per_km
