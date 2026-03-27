@@ -98,6 +98,23 @@ It's best to name agents folder with underscore `_`, given google adk [faced iss
                   → call succeeds ✅
    ```
 
+4. In ADK deploy,  the (.) identifies the folder containing your agent (agent.yaml, tools, MCP configs); all flags before the path (.) configure ADK itself,and everything after the -- is passed directly and untouched to gcloud run deploy as Cloud Run flags.
+The `.` in ADK DEPLOY COMMAND specify agent source directory, while the `--` seperates ADK arguments from gcloud arguments. The deployment with the adk command over traditional `gcloud run deploy` does 2 major things: 
+- Creates the Agent UI + registers metadata for the ADK console
+- Create docker image, builds & packages the ADK agent (tools, manifest, MCP config), no manual tasks.
+
+   ```bash
+      source .env 
+      adk deploy cloud_run \
+      --project=$GOOGLE_CLOUD_PROJECT \
+      --region=$GOOGLE_CLOUD_LOCATION \
+      --service_name=$GOOGLE_CLOUD_PROJECT \
+      --with_ui \
+      . \
+      -- \
+      --service-account=$SERVICE_ACCOUNT
+   ```
+
 # Projects 
 | Project | Concepts Learned | Codelab |
 |---|---|---|
