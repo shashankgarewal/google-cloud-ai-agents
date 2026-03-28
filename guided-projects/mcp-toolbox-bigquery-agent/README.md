@@ -24,3 +24,6 @@ The agent relies on the MCP Toolbox for tool execution; the “agentic” behavi
 > The `--ui` flag exposes a browser UI, useful for testing the MCP server before connecting an agent as a client.
 
 ---
+
+## LLM Agent invoking BigQuery database
+![ADK Agent Responses to User Queries about database information](../../images/mcp_database_agent.png)
