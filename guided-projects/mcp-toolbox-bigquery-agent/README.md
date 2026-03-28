@@ -11,3 +11,16 @@ An ADK agent connected to **MCP Toolbox for Databases**, exposing the **Google C
 The agent relies on the MCP Toolbox for tool execution; the “agentic” behavior comes from the MCP integration rather than multi‑agent orchestration.
 
 ---
+
+## Run MCP Database Server
+
+### MCP for Database
+```bash
+[TOOLBOX-EXECUTABLE] --tools-file=[TOOLBOX-YAML] --ui --port 8000
+```
+
+> **Note:** Compatible with toolbox `v0.23.0`. Newer versions use a different `tools.yaml` syntax — check the changelog before upgrading.
+>
+> The `--ui` flag exposes a browser UI, useful for testing the MCP server before connecting an agent as a client.
+
+---
