@@ -19,6 +19,13 @@ It's best to name agents folder with underscore `_`, given google adk [faced iss
 
    Both use the same `google-genai` SDK under the hood; differs in inital client setup (`vertexai=True` + project/location vs. just an API key).[1](https://google.github.io/adk-docs/agents/models/google-gemini/#google-ai-studio) and [2](https://ai.google.dev/gemini-api/docs/migrate-to-cloud)
 
+5. [MCP Toolbox for databases](https://github.com/googleapis/genai-toolbox) turns a database into an MCP server - user define SQL queries in `tools.yaml`, and the agent calls them as tools without writing any SQL.
+
+   Whatever the `SELECT` in SQL queries returns is the only data the agent sees and uses to answer the user. Nothing more, nothing less.
+
+   Toolbox server can be accessed via either via `toolbox-core` (direct Python client) or `MCPToolset` (standard MCP protocol) — same server, different client libraries.
+
+   Toolbox can handle database auth, which standard `MCPToolset` can't - It only speaks MCP protocol, no database auth built in.
 
 ## GCP
 1. Project ID must be set even for locally running agents — turns out the Vertex AI API
@@ -35,7 +42,7 @@ It's best to name agents folder with underscore `_`, given google adk [faced iss
       # Get ORG_ID
       gcloud organizations list
 
-      # Set permission
+      # Set folder creation permission
       gcloud organizations add-iam-policy-binding [ORG_ID] --member="user:YOUR_EMAIL" --role="roles/resourcemanager.folderCreator"
 
       # Create folder
@@ -59,14 +66,32 @@ It's best to name agents folder with underscore `_`, given google adk [faced iss
 
       # to check if already assigned
       gcloud billing projects describe [PROJECT_ID]
+
+      # remove billing account once done
+      gcloud billing projects unlink [PROJECT_ID]
    ```
 
 6. The Project IDs are globally unique across **all GCP users and organizations**, similar to how domain names work on the internet or username in linkedin.
 
-7. The service account automatically binds with active/default project configured at the momemnt of creating service account. 
+7. A service account is always created inside a specific project — whichever project is active/default in your `gcloud` config at the time of creation. 
       
-      ![service account creation failed when no project is set](sa_fail_no_projectID.png)
+      ![service account creation failed when no project is set](../images/sa_fail_no_projectID.png)
+   
+   A service account is owned by a project, though it can be granted permissions at the resource, project, folder, or org level.
 
+   Multiple service accounts can be created within a project, each for a different purpose — for example, one for local development (broader permissions) and one for a deployed app (minimal permissions).
+   ```bash
+      # create service account
+      gcloud iam service-accounts create [SA_ID] --display-name=[SA_DISPLAY_NAME] --project=[PROJECT_ID]
+
+      # find SA email
+      gcloud iam service-accounts list --project=[PROJECT_ID] 
+
+      # assign role to SA
+      gcloud projects add-iam-policy-binding [PROJECT_ID] --member="serviceAccount:[SA_EMAIL]" --role="[ROLE]"
+      ## [SA_EMAIL] = [SA_ID]@[PROJECT_ID].iam.gserviceaccount.com
+   ```
+   When `--project` is not provided, the default project set in `gcloud` config is used.
 
 ## General
 1. Not all AI services are available in every region — `us-central1` has the broadest coverage.
@@ -118,5 +143,7 @@ The `.` in ADK DEPLOY COMMAND specify agent source directory, while the `--` sep
 # Projects 
 | Project | Concepts Learned | Codelab |
 |---|---|---|
-| [`hello_agent`](./hello_agent) | ADK basics, project setup, venv | [Live](https://codelabs.developers.google.com/devsite/codelabs/build-agents-with-adk-foundation) / [archive](https://web.archive.org/web/20260324113305/https://codelabs.developers.google.com/devsite/codelabs/build-agents-with-adk-empowering-with-tools) |
-| [`sequential_agent_deployed`](./sequential_agent_deployed) | Sequential agents, state sharing, Cloud Run | [Live](https://codelabs.developers.google.com/codelabs/production-ready-ai-with-gc/5-deploying-agents/deploy-an-adk-agent-to-cloud-run) / [archive](https://web.archive.org/web/20260324113659/https://codelabs.developers.google.com/codelabs/production-ready-ai-with-gc/5-deploying-agents/deploy-an-adk-agent-to-cloud-run)|
+| [`hello-agent`](./hello-agent) | ADK basics, project setup, venv | [Live](https://codelabs.developers.google.com/devsite/codelabs/build-agents-with-adk-foundation) / [archive](https://web.archive.org/web/20260324113305/https://codelabs.developers.google.com/devsite/codelabs/build-agents-with-adk-empowering-with-tools) |
+| [`sequential-agent-deployed`](./sequential-agent-deployed) | Sequential agents, state sharing, Cloud Run | [Live](https://codelabs.developers.google.com/codelabs/production-ready-ai-with-gc/5-deploying-agents/deploy-an-adk-agent-to-cloud-run) / [archive](https://web.archive.org/web/20260324113659/https://codelabs.developers.google.com/codelabs/production-ready-ai-with-gc/5-deploying-agents/deploy-an-adk-agent-to-cloud-run)|
+| [`mcp-toolbox-bigquery-agent`](./mcp-toolbox-bigquery-agent) | MCP Toolbox, BigQuery as MCP server, ADK agent as MCP client | [Live](https://codelabs.developers.google.com/mcp-toolbox-bigquery-dataset) / [archive](https://web.archive.org/web/20260219040032/https://codelabs.developers.google.com/mcp-toolbox-bigquery-dataset) |
+| [`managed-mcp-bigquery-maps-agent`](./managed-mcp-bigquery-maps-agent) | Google-hosted MCP servers (BigQuery + Google Maps), ADK agent as MCP client, location intelligence | [Live](https://codelabs.developers.google.com/adk-mcp-bigquery-maps) / [archive](https://web.archive.org/web/20260329004509/https://codelabs.developers.google.com/adk-mcp-bigquery-maps) |
