@@ -8,7 +8,7 @@ MAPS_MCP_URL = "https://mapstools.googleapis.com/mcp"
 BIGQUERY_MCP_URL = "https://bigquery.googleapis.com/mcp" 
 
 def get_maps_mcp_toolset():
-    dotenv.load_dotenv()
+    dotenv.load_dotenv("../")
     maps_api_key = os.getenv('MAPS_API_KEY', 'no_api_found')
     
     tools = MCPToolset(

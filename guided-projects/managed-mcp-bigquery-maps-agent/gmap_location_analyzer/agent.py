@@ -1,14 +1,14 @@
 import os
 import dotenv
-from mcp_bakery_app import tools
+from tools import gmap_bigquery as gmap_bigquery_tools
 from google.adk.agents import LlmAgent
 
-dotenv.load_dotenv()
+dotenv.load_dotenv("../")
 
 PROJECT_ID = os.getenv('GOOGLE_CLOUD_PROJECT', 'project_not_set')
 
-maps_toolset = tools.get_maps_mcp_toolset()
-bigquery_toolset = tools.get_bigquery_mcp_toolset()
+maps_toolset = gmap_bigquery_tools.get_maps_mcp_toolset()
+bigquery_toolset = gmap_bigquery_tools.get_bigquery_mcp_toolset()
 
 root_agent = LlmAgent(
     model='gemini-3.1-pro-preview',
