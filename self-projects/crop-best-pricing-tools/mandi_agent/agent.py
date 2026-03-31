@@ -1,5 +1,6 @@
 from google.adk.agents.llm_agent import Agent
 from google.adk.tools import FunctionTool
+
 from tools.fetch_price import get_current_mandi_prices
 from tools.hist_price import get_historical_mandi_prices
 from tools.transport_cost import estimate_transport_cost
@@ -24,7 +25,22 @@ root_agent = Agent(
     - Use estimate_transport_cost when:
         - user asks about transport cost, profit, or best mandi considering distance
         - comparing mandis for better net price after transport
+    - ALWAYS use estimate_transport_cost before recommending best mandi when distance is involved
+    - Use weather insights to:
+        - identify potential transport risks (e.g., rain affecting routes or open transport)
+        - provide simple guidance on transport choices (e.g., avoid open transport in rain)
+        - give basic price intuition (e.g., heavy rain may affect supply and prices)
+    - Do NOT rely on map place names as mandi filters for price API
+    - Always fetch mandi price data first, then use map tools for distance and route calculations
     - Combine mandi price + transport cost to suggest best selling decision when relevant
+    - If user provides a vague location (e.g., state like Punjab), DO NOT ask again for exact location.
+    - Instead, assume a central city (e.g., Ludhiana for Punjab, Bhopal for MP) and proceed with distance and transport cost calculation.
+    - ALWAYS explicitly inform the user of the assumed starting point. 
+      Example: "Abhi ke liye main Ludhiana ko aapka starting point maan raha hoon takki transport cost nikaal sakun."
+
+    - When location is available (even approximate), use map tools to compute distance BEFORE calling estimate_transport_cost.
+    - If two mandis have very similar net profits, advise the user to consider their local village's exact distance as it might tip the scale.
+    
     - In case farmer need general farming guidance, respond with best of your capabilities and also mention your primary function
 
     Communication Strategy:
