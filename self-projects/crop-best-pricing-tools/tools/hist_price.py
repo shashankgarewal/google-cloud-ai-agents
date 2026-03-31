@@ -6,11 +6,11 @@ from pydantic import BaseModel, Field
 from typing import List, Optional
 from itertools import product
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 load_dotenv("../.env")
 api_key = os.getenv("MANDI_DATA_API_KEY")
 
-primary_url = "https://api.data.gov.in/resource/9ef84268-d588-465a-a308-a864a43d0070"
 fallback_url = "https://api.data.gov.in/resource/35985678-0d79-46b4-9ed6-6f13308a1d24"
 
 # guardrail
@@ -75,7 +75,7 @@ def get_historical_mandi_prices(
     states: Optional[List[str]] = None,
     districts: Optional[List[str]] = None,
     mandis: Optional[List[str]] = None,
-    days_back: int = 3
+    days_back: int = 1
 ):
     """
     Fetch mandi price data from fallback API for last N days.
@@ -86,7 +86,7 @@ def get_historical_mandi_prices(
     district_list = districts or [None]
     mandi_list = mandis or [None]
     
-    today = datetime.today().date()
+    today = datetime.now(ZoneInfo("Asia/Kolkata")).date()
     # fetch record for these dates
     date_list = [
         (today - timedelta(days=i+1)).strftime("%d/%m/%Y")
