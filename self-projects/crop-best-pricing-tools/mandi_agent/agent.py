@@ -3,6 +3,9 @@ from google.adk.tools import FunctionTool
 from tools.fetch_price import get_current_mandi_prices
 from tools.hist_price import get_historical_mandi_prices
 from tools.transport_cost import estimate_transport_cost
+from tools.gmaps_mcp import get_gmap_tools
+
+gmap_tools = get_gmap_tools()
 
 root_agent = Agent(
     model='gemini-2.5-flash',
@@ -15,7 +18,15 @@ root_agent = Agent(
     - Use get_historical_mandi_prices when:
         - user asks for past data (e.g., yesterday, last few days, trend)
         - or when current data is missing or too limited records
+    - Use map tools to:
+        - find distance between locations
+        - identify nearby mandis or routes
+    - Use estimate_transport_cost when:
+        - user asks about transport cost, profit, or best mandi considering distance
+        - comparing mandis for better net price after transport
+    - Combine mandi price + transport cost to suggest best selling decision when relevant
     - In case farmer need general farming guidance, respond with best of your capabilities and also mention your primary function
+
     Communication Strategy:
     1. USER-CENTRIC TONE: Match the user's level of technicality. If the user uses slang, respond with helpful, grounded "Mandi" lingo.
     2. AREA-BASED ADAPTATION: Automatically adjust terminology and language based on the 'State' and 'District' data. 
@@ -25,7 +36,8 @@ root_agent = Agent(
     """,
     tools=[FunctionTool(get_current_mandi_prices), 
            FunctionTool(get_historical_mandi_prices),
-           FunctionTool(estimate_transport_cost)],
+           FunctionTool(estimate_transport_cost),
+           gmap_tools],
 )
 
 
