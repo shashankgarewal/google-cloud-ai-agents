@@ -3,7 +3,6 @@ import math
 import requests
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field, field_validator
-from datetime import date, datetime
 from typing import List, Optional
 from itertools import product
 
@@ -25,17 +24,11 @@ class MandiRecord(BaseModel):
     market: str = Field(alias="market")
     commodity: str = Field(alias="commodity")
     variety: str = Field(alias="variety")
-    arrival_date: date = Field(alias="arrival_date")
+    arrival_date: str = Field(alias="arrival_date")
     min_price: float = Field(alias="min_price")
     max_price: float = Field(alias="max_price")
     modal_price: float = Field(alias="modal_price")
-    
-    @field_validator("arrival_date", mode="before")
-    @classmethod
-    def parse_date(cls, raw_date):
-        if isinstance(raw_date, str):
-            return datetime.strptime(raw_date, "%d/%m/%Y").date()
-        return raw_date
+
 
 class MandiResponse(BaseModel):
     records: List[MandiRecord]
@@ -78,12 +71,6 @@ def get_current_mandi_prices(crops: Optional[List[str]] = None,
                              ):
     """
     Fetches latest price data with support for multiple filters
-
-    Args:
-        crop (str): crop name e.g., "onion", "wheat" in api supported format
-        state: Optional state name, e.g. "Madhya Pradesh", "Maharashtra".
-        district: Optional district name, e.g. "Dewas", "Indore", "Nashik".
-        mandi: Optional specific market/mandi name, e.g. "Dewas", "Azadpur".
     """
     crop_list = crops or [None]
     state_list = states or [None]
