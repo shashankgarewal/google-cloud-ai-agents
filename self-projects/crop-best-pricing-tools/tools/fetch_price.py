@@ -14,7 +14,7 @@ fallback_url = "https://api.data.gov.in/resource/35985678-0d79-46b4-9ed6-6f13308
 
 # guardrail - prevent from extreme api calls 
 BATCH_SIZE = 100
-MAX_PAGES = 10
+MAX_PAGES = 5
 MAX_COMBINATIONS = 10
 
 # ------------------------------- output schema ------------------------------ #
