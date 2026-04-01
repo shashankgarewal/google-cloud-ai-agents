@@ -1,14 +1,15 @@
 import os
 import dotenv
 import google.auth
-from google.adk.tools.mcp_tool.mcp_toolset import MCPToolset
+from pathlib import Path
+from google.adk.tools.mcp_tool.mcp_toolset import McpToolset, MCPToolset
 from google.adk.tools.mcp_tool.mcp_session_manager import StreamableHTTPConnectionParams 
 
 MAPS_MCP_URL = "https://mapstools.googleapis.com/mcp" 
 BIGQUERY_MCP_URL = "https://bigquery.googleapis.com/mcp" 
 
 def get_maps_mcp_toolset():
-    dotenv.load_dotenv("../")
+    dotenv.load_dotenv(Path(__file__).parent.parent / ".env")
     maps_api_key = os.getenv('MAPS_API_KEY', 'no_api_found')
     
     tools = MCPToolset(
@@ -31,21 +32,22 @@ def get_bigquery_mcp_toolset():
             scopes=["https://www.googleapis.com/auth/bigquery"]
     )
 
-    credentials.refresh(google.auth.transport.requests.Request())
-    oauth_token = credentials.token
-        
-    HEADERS_WITH_OAUTH = {
-        "Authorization": f"Bearer {oauth_token}",
-        "x-goog-user-project": project_id
-    }
+    def get_auth_headers(_=None):
+        credentials.refresh(google.auth.transport.requests.Request())
+        oauth_token = credentials.token
+            
+        return {
+            "Authorization": f"Bearer {oauth_token}",
+            "x-goog-user-project": project_id
+        }
 
-    tools = MCPToolset(
+    tools = McpToolset(
         connection_params=StreamableHTTPConnectionParams(
             url=BIGQUERY_MCP_URL,
-            headers=HEADERS_WITH_OAUTH,
             timeout=30.0,          
             sse_read_timeout=300.0
-        )
+        ),
+        header_provider=get_auth_headers,
     )
     print("MCP Toolset configured for Streamable HTTP connection.")
     return tools
