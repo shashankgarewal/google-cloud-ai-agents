@@ -93,6 +93,26 @@ It's best to name agents folder with underscore `_`, given google adk [faced iss
    ```
    When `--project` is not provided, the default project set in `gcloud` config is used.
 
+8. GCP provides 2 ways to enable MCP services: `gcloud beta services mcp enable [SERVICE]` and `gcloud beta api-registry mcp enable [SERVICE]`.
+
+   [api-registry](https://docs.cloud.google.com/api-registry/docs/overview) additionally provides:
+   - Auto-discovery: agent fetches enabled tools dynamically at runtime (`tools = ApiRegistry.get_toolset()`) instead of hardcoding each tool (`tools = [bigquery_tool, logging_tool, storage_tool]`)
+   - MCP metrics (request count, error rates, latency) via Cloud Observability
+   - Centralized access control and governance across the org
+
+9. API keys on GCP are unrestricted by default — they can access any Google API service. 
+   Restrictions can be added at creation or later via update, [read more](https://docs.cloud.google.com/sdk/gcloud/reference/services/api-keys).
+   ```bash
+      # create api-key restricted to a specific service
+      gcloud services api-keys create --display-name=[API_KEY_NAME] --api-target=service=[SERVICE] --project=[PROJECT_ID --format=json  
+
+      # create first, then restrict
+      gcloud services api-keys create --display-name=[API_KEY_NAME] --project=[PROJECT_ID]
+
+      ## create returns json, where uid = KEY_ID and **keyString** = API_KEY that goes in .env file
+      gcloud services api-keys update [KEY_ID] --api-target=service=[SERVICE] --project=[PROJECT_ID]
+   ```
+
 ## General
 1. Not all AI services are available in every region — `us-central1` has the broadest coverage.
 
@@ -125,20 +145,29 @@ It's best to name agents folder with underscore `_`, given google adk [faced iss
 
 4. In ADK deploy,  the (.) identifies the folder containing your agent (agent.yaml, tools, MCP configs); all flags before the path (.) configure ADK itself,and everything after the -- is passed directly and untouched to gcloud run deploy as Cloud Run flags.
 The `.` in ADK DEPLOY COMMAND specify agent source directory, while the `--` seperates ADK arguments from gcloud arguments. The deployment with the adk command over traditional `gcloud run deploy` does 2 major things: 
-- Creates the Agent UI + registers metadata for the ADK console
-- Create docker image, builds & packages the ADK agent (tools, manifest, MCP config), no manual tasks.
+   - Creates the Agent UI + registers metadata for the ADK console
+   - Create docker image, builds & packages the ADK agent (tools, manifest, MCP config), no manual tasks.
 
    ```bash
       source .env 
       adk deploy cloud_run \
       --project=$GOOGLE_CLOUD_PROJECT \
       --region=$GOOGLE_CLOUD_LOCATION \
-      --service_name=$GOOGLE_CLOUD_PROJECT \
+      --service_name=$APP_NAME \
       --with_ui \
       . \
       -- \
       --service-account=$SERVICE_ACCOUNT
    ```
+   APP_NAME appears in URL in format APP_NAME-PROJECT_ID.GOOGLE_CLOUD_LOCATION.run.app
+
+5. For deployment, the best workflow is `git clone` the public repo in Cloud Shell 
+   and `gcloud cloud-shell scp` only the sensitive files (e.g. `.env`) that aren't 
+   in the public repo. 
+   
+   Avoid running `adk deploy` from a local machine — zipping and uploading the source from local takes a significant hit on deployment time. 
+   
+   Running the deploy from Cloud Shell is faster since it's already in Google's network.
 
 # Projects 
 | Project | Concepts Learned | Codelab |

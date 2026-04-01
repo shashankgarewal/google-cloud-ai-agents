@@ -1,0 +1,1 @@
+from .gmap_location_analyzer.agent import root_agent

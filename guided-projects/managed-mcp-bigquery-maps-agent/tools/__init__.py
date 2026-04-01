@@ -1,1 +1,1 @@
-from . import gmap_bigquery as tools
+from . import gmap_bigquery

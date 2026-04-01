@@ -1,9 +1,11 @@
 import os
+import sys
 import dotenv
-from tools import gmap_bigquery as gmap_bigquery_tools
+from pathlib import Path
+from ..tools import gmap_bigquery as gmap_bigquery_tools
 from google.adk.agents import LlmAgent
 
-dotenv.load_dotenv("../")
+dotenv.load_dotenv(Path(__file__).parent.parent / ".env")
 
 PROJECT_ID = os.getenv('GOOGLE_CLOUD_PROJECT', 'project_not_set')
 
