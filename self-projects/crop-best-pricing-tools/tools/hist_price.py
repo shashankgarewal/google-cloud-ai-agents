@@ -8,6 +8,9 @@ from itertools import product
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
+from ..utils.schema import MandiRecord, MandiResponse, ErrorResponse
+
+
 load_dotenv("../.env")
 api_key = os.getenv("MANDI_DATA_API_KEY")
 
@@ -19,30 +22,14 @@ MAX_PAGES = 10
 MAX_COMBINATIONS = 10
 
 
-# ------------------------------- output schema ------------------------------ #
-class MandiRecord(BaseModel):
-    state: str = Field(alias="State")
-    district: str = Field(alias="District")
-    market: str = Field(alias="Market")
-    commodity: str = Field(alias="Commodity")
-    variety: str = Field(alias="Variety")
-    arrival_date: str = Field(alias="Arrival_Date")
-    min_price: float = Field(alias="Min_Price")
-    max_price: float = Field(alias="Max_Price")
-    modal_price: float = Field(alias="Modal_Price")
-
-
-class MandiResponse(BaseModel):
-    records: List[MandiRecord]
-    total_fetched: int
-    total_records: int
-
-
-class ErrorResponse(BaseModel):
-    error: str
-
-
 # ---------------------------------- helper ---------------------------------- #
+def normalize_keys(record: dict) -> dict:
+    return {k.lower(): v for k, v in record.items()}
+
+def get_today():
+    """Returns date of today"""
+    return datetime.now(ZoneInfo("Asia/Kolkata")).date()
+
 
 def _build_fallback_params(crop, state, district, mandi,
                           arrival_date=None,
@@ -86,7 +73,7 @@ def get_historical_mandi_prices(
     district_list = districts or [None]
     mandi_list = mandis or [None]
     
-    today = datetime.now(ZoneInfo("Asia/Kolkata")).date()
+    today = get_today()
     # fetch record for these dates
     date_list = [
         (today - timedelta(days=i+1)).strftime("%d/%m/%Y")
@@ -167,7 +154,7 @@ def get_historical_mandi_prices(
                     break
 
                 fetched_records.extend(
-                    [MandiRecord(**r) for r in raw_records]
+                    [MandiRecord(**normalize_keys(r)) for r in raw_records]
                     )
 
             except Exception:

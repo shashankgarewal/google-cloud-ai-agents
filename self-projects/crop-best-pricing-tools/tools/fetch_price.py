@@ -6,6 +6,8 @@ from pydantic import BaseModel, Field, field_validator
 from typing import List, Optional
 from itertools import product
 
+from ..utils.schema import MandiRecord, MandiResponse, ErrorResponse
+
 load_dotenv("../.env")
 api_key = os.getenv("MANDI_DATA_API_KEY")
 
@@ -16,27 +18,6 @@ fallback_url = "https://api.data.gov.in/resource/35985678-0d79-46b4-9ed6-6f13308
 BATCH_SIZE = 100
 MAX_PAGES = 5
 MAX_COMBINATIONS = 10
-
-# ------------------------------- output schema ------------------------------ #
-class MandiRecord(BaseModel):
-    state: str = Field(alias="state")
-    district: str = Field(alias="district")
-    market: str = Field(alias="market")
-    commodity: str = Field(alias="commodity")
-    variety: str = Field(alias="variety")
-    arrival_date: str = Field(alias="arrival_date")
-    min_price: float = Field(alias="min_price")
-    max_price: float = Field(alias="max_price")
-    modal_price: float = Field(alias="modal_price")
-
-
-class MandiResponse(BaseModel):
-    records: List[MandiRecord]
-    total_fetched: int
-    total_records: int
-
-class ErrorResponse(BaseModel):
-    error: str
     
 # ---------------------------------- helper ---------------------------------- #
 
