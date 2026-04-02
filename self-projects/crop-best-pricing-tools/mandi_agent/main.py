@@ -5,7 +5,7 @@ from ..tools.fetch_price import get_current_mandi_prices
 from ..tools.hist_price import get_historical_mandi_prices, get_today
 from ..tools.transport_cost import estimate_transport_cost
 from ..tools.gmaps_mcp import get_gmap_tools
-from ..utils.identity import build_grounding
+from ..utils.context import build_grounding
 
 from .response import response_agent
 

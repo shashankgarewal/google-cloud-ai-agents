@@ -1,5 +1,5 @@
 from google.adk.agents.llm_agent import Agent
-from ..utils.identity import load_info
+from ..utils.context import load_info
 
 info = load_info()
 SYSTEM_GROUNDING = info.get('system_grounding')
