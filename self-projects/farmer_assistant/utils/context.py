@@ -17,7 +17,7 @@ def build_grounding() -> str:
     date_str = now.strftime('%A, %Y-%m-%d')
     
     grounding_context = f"""
-You are part of the 'Kisan Sahayak' (Farmer Assistant) suite.
+You are part of the Farmer Assistant suite.
 Today's Date: {date_str} (India)
 """
     # 
