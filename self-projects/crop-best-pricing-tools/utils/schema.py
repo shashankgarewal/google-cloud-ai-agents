@@ -26,24 +26,27 @@ class DistanceRecord(BaseModel):
     distance_km: float
 
 
-class TransportCostRecord(BaseModel):
+class TransportInsight(BaseModel):
     mandi: str
-    cost: float
+    distance_km: float
+    vehicle_type: str
+
+    total_transport_cost_rs: float
+    cost_per_kg: float
+
+    mandi_price_per_kg: float
+    net_price_per_kg: float
+
+    viable: bool
+    note: str
 
 
-class NetPriceRecord(BaseModel):
-    mandi: str
-    net_price: float
-    
 class StructuredData(BaseModel):
-    user_query: str
-    crop: Optional[str]
-    location: Optional[str]
+    original_user_message: str
 
-    mandi_prices: List[MandiRecord]
+    mandi_prices: Optional[List[MandiRecord]] = None
+    transport_insights: Optional[List[TransportInsight]] = None
+    map_data: Optional[list] = None
 
-    distance_data: Optional[List[DistanceRecord]] = None
-    transport_costs: Optional[List[TransportCostRecord]] = None
-    net_prices: Optional[List[NetPriceRecord]] = None
-
+    notes: Optional[List[str]] = None
     assumptions: Optional[List[str]] = None

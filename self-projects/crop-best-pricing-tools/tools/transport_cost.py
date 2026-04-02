@@ -1,4 +1,7 @@
-def estimate_transport_cost(distance_km: float, 
+from ..utils.schema import TransportInsight
+
+def estimate_transport_cost(mandi: str, 
+                            distance_km: float, 
                              quantity_kg: float, 
                              mandi_price_per_quintal: float, 
                              vehicle_type: str = "mini_truck"
@@ -32,7 +35,8 @@ def estimate_transport_cost(distance_km: float,
 
     net_price_per_kg = mandi_price_per_kg - cost_per_kg
 
-    return {
+    insights = {
+        "mandi": mandi,
         "distance_km": round(distance_km, 1),
         "vehicle_type": vehicle_type,
         "total_transport_cost_rs": round(total_transport_cost, 2),
@@ -47,3 +51,5 @@ def estimate_transport_cost(distance_km: float,
             else f"Transport cost (₹{round(cost_per_kg,2)}/kg) exceeds mandi price. Not viable."
         )
     }
+    
+    return TransportInsight(**insights)
