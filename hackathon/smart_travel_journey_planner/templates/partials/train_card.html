@@ -1,0 +1,54 @@
+<div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 mb-4 transition-all" id="card-{{ train.train_id }}">
+    <div class="flex justify-between items-start mb-2">
+        <h3 class="font-semibold text-gray-900 text-[16px]">{{ train.name }}</h3>
+        
+        {% set int_score = (train.reliability_score * 100) | round | int %}
+        {% if int_score >= 90 %}
+            <span class="bg-[#1ca638] text-white text-[12px] font-medium px-2 py-1 rounded-[16px]">{{ int_score }}% On-time</span>
+        {% elif int_score >= 75 %}
+            <span class="bg-[#d9900b] text-white text-[12px] font-medium px-2 py-1 rounded-[16px]">{{ int_score }}% On-time</span>
+        {% else %}
+            <span class="bg-[#e00000] text-white text-[12px] font-medium px-2 py-1 rounded-[16px]">{{ int_score }}% On-time</span>
+        {% endif %}
+    </div>
+    
+    <div class="flex items-center space-x-2 text-[15px] mb-4">
+        <span class="text-[#0066ff] font-semibold">{{ train.departure }}</span>
+        <span class="text-gray-400 text-[12px]">›</span>
+        <span class="text-[#0066ff] font-semibold">{{ train.arrival }}</span>
+        <span class="text-gray-500 text-[13px] ml-1">
+            (2h 15m)
+        </span>
+    </div>
+    
+    <div class="flex justify-between items-center mt-4 pt-2">
+        <button type="button" 
+                class="text-[#0066ff] text-[13px] hover:underline"
+                onclick="toggleInsight(this, 'insight-{{ train.train_id }}')">
+            Why recommended ▾
+        </button>
+        
+        <button type="button"
+                class="text-[#0066ff] text-[14px] font-medium hover:underline flex items-center"
+                onclick="bookNow('{{ train.train_id }}', this)">
+            Book now <span class="ml-1">→</span>
+        </button>
+    </div>
+    
+    <div id="insight-{{ train.train_id }}"></div>
+</div>
+
+<script>
+    if (typeof toggleInsight === 'undefined') {
+        window.toggleInsight = function(btn, targetId) {
+            let target = document.getElementById(targetId);
+            if(btn.innerText.includes('▾')) {
+                btn.innerText = 'Why recommended ▴';
+                htmx.ajax('GET', '/ui/insight/' + targetId.split('-')[1], {target: '#' + targetId, swap: 'innerHTML'});
+            } else {
+                btn.innerText = 'Why recommended ▾';
+                target.innerHTML = '';
+            }
+        };
+    }
+</script>

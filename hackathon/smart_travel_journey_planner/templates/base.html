@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Journey Planner</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <script src="https://unpkg.com/htmx.org/dist/ext/sse.js"></script>
+    <style>
+        body { background-color: #f7f9fc; color: #1a1b26; } /* Matching the screenshot base background */
+        /* But wait, the form says "dark search bar (background #1e1f2e)". Let's make body dark to fit the theme? Or light to match screenshot? Screenshot has light body. */
+    </style>
+</head>
+<body class="bg-[#f0f4f8] text-[#1a1b26] antialiased">
+    <!-- Top Query Feature -->
+    <div class="bg-[#1e1f2e] text-[#e8e9f5] py-4 px-6 shadow-md border-b border-[#3a3b52]">
+        <div class="max-w-3xl mx-auto flex gap-4">
+            <input type="text" id="ai-query-input" placeholder="Ask the Trip Orchestrator agent anything..." class="flex-1 bg-[#2a2b3d] border border-[#3a3b52] rounded-[10px] px-4 py-2 focus:border-[#7c6fff] focus:ring-1 focus:ring-[#7c6fff] outline-none text-[14px]">
+            <button onclick="submitQuery()" class="bg-[#6c63f5] hover:bg-[#5a52d5] text-white px-5 py-2 rounded-[10px] font-medium text-[14px] transition-colors">Ask AI</button>
+        </div>
+        <div id="ai-query-response" class="max-w-3xl mx-auto mt-3 text-[13px] text-[#9899b3] hidden p-3 bg-[#2a2b3d] rounded-[8px] border border-[#3a3b52]"></div>
+    </div>
+
+    <script>
+    async function submitQuery() {
+        const input = document.getElementById('ai-query-input');
+        const respDiv = document.getElementById('ai-query-response');
+        const query = input.value.trim();
+        if(!query) return;
+        
+        respDiv.classList.remove('hidden');
+        respDiv.innerHTML = '<span class="animate-pulse flex items-center gap-2"><svg class="animate-spin w-4 h-4 text-[#7c6fff]" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Orchestrator agent is thinking...</span>';
+        
+        try {
+            const res = await fetch('/query', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({query: query})
+            });
+            const data = await res.json();
+            respDiv.innerText = data.response || "No response received.";
+        } catch(e) {
+            respDiv.innerText = "Error contacting agent.";
+        }
+    }
+    </script>
+
+    <div class="max-w-3xl mx-auto p-4 sm:p-6 lg:p-8">
+        {% block content %}{% endblock %}
+    </div>
+
+    <script>
+        // JS logic for combobox
+        document.addEventListener('DOMContentLoaded', () => {
+            const container = document.getElementById('preference-container');
+            if(!container) return;
+
+            const input = document.getElementById('preference-input');
+            const dropdown = document.getElementById('preference-dropdown');
+            const listItems = document.querySelectorAll('.sugg-btn');
+            const customWrapper = document.getElementById('custom-preference-wrapper');
+            const customBtn = document.getElementById('custom-preference-btn');
+            const customTextSpan = document.getElementById('custom-text');
+
+            function filterItems(query) {
+                query = query.toLowerCase();
+                let hasMatch = false;
+                listItems.forEach(btn => {
+                    const text = btn.textContent.toLowerCase();
+                    if (text.includes(query)) {
+                        btn.parentElement.style.display = '';
+                        if(text === query) hasMatch = true;
+                    } else {
+                        btn.parentElement.style.display = 'none';
+                    }
+                });
+                
+                if (query.trim().length > 0 && !hasMatch) {
+                    customWrapper.classList.remove('hidden');
+                    customTextSpan.textContent = input.value;
+                } else {
+                    customWrapper.classList.add('hidden');
+                }
+            }
+
+            input.addEventListener('focus', () => {
+                dropdown.classList.remove('hidden');
+                filterItems(input.value);
+            });
+
+            input.addEventListener('input', (e) => {
+                dropdown.classList.remove('hidden');
+                filterItems(e.target.value);
+            });
+
+            // Handle selection
+            listItems.forEach(btn => {
+                btn.addEventListener('mousedown', (e) => {
+                    // mousedown fires before blur
+                    input.value = btn.textContent.trim();
+                    dropdown.classList.add('hidden');
+                });
+            });
+
+            customBtn.addEventListener('mousedown', () => {
+                input.value = customTextSpan.textContent;
+                dropdown.classList.add('hidden');
+            });
+
+            // Close when clicking outside
+            document.addEventListener('mousedown', (e) => {
+                if (!container.contains(e.target)) {
+                    dropdown.classList.add('hidden');
+                }
+            });
+        });
+    </script>
+</body>
+</html>

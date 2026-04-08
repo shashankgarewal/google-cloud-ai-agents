@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="mt-4 mb-8">
+    {% include "partials/search_form.html" %}
+</div>
+
+<div class="mt-6 max-w-lg mx-auto">
+    <div class="flex justify-between items-center mb-4 px-1">
+        <h2 class="text-[18px] font-semibold text-gray-900">Recommended for you</h2>
+        <span class="text-[13px] text-gray-500">{{ alternatives|length + 1 }} trains</span>
+    </div>
+
+    <div class="space-y-4">
+        {% set train = recommended %}
+        {% include "partials/train_card.html" %}
+        
+        {% for train in alternatives %}
+            {% include "partials/train_card.html" %}
+        {% endfor %}
+    </div>
+    
+    <div class="mt-8">
+        {% include "partials/sync_panel.html" %}
+    </div>
+</div>
+{% endblock %}

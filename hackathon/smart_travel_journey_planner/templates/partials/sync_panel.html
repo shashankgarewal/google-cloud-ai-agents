@@ -1,0 +1,150 @@
+<div id="sync-panel" class="hidden bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+    <h3 class="font-medium text-gray-700 text-[14px] mb-4">Synced with your services</h3>
+    <div class="space-y-4">
+        <!-- Row 1: Calendar -->
+        <div id="sync-row-calendar" class="flex items-center justify-between p-3 rounded-[12px] border border-gray-50 opacity-50 bg-gray-50 transition-all">
+            <div class="flex items-center space-x-3">
+                <div class="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center text-blue-500">
+                    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                </div>
+                <div>
+                    <p class="text-[14px] font-medium text-gray-900" id="sync-title-calendar">Syncing calendar...</p>
+                    <p class="text-[12px] text-gray-500" id="sync-detail-calendar">Waiting for agent</p>
+                </div>
+            </div>
+            <div class="status-icon" id="sync-status-calendar">
+                <svg class="animate-spin w-5 h-5 text-gray-300" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+            </div>
+        </div>
+
+        <!-- Row 2: Gmail -->
+        <div id="sync-row-gmail" class="flex items-center justify-between p-3 rounded-[12px] border border-gray-50 opacity-50 bg-gray-50 transition-all">
+            <div class="flex items-center space-x-3">
+                <div class="w-8 h-8 rounded-full bg-red-50 flex items-center justify-center text-red-500">
+                    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+                </div>
+                <div>
+                    <p class="text-[14px] font-medium text-gray-900" id="sync-title-gmail">Syncing Gmail...</p>
+                    <p class="text-[12px] text-gray-500" id="sync-detail-gmail">Waiting for agent</p>
+                </div>
+            </div>
+            <div class="status-icon" id="sync-status-gmail">
+                <svg class="animate-spin w-5 h-5 text-gray-300" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+            </div>
+        </div>
+
+        <!-- Row 3: Tasks -->
+        <div id="sync-row-tasks" class="flex items-center justify-between p-3 rounded-[12px] border border-gray-50 opacity-50 bg-gray-50 transition-all">
+            <div class="flex items-center space-x-3">
+                <div class="w-8 h-8 rounded-full bg-green-50 flex items-center justify-center text-green-500">
+                    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 17a2 2 0 11-4 0 2 2 0 014 0zM19 17a2 2 0 11-4 0 2 2 0 014 0zM13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h1m8-1a1 1 0 01-1 1H9m4-1V8a1 1 0 011-1h2.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V16a1 1 0 01-1 1h-1m-6-1a1 1 0 001 1h1M5 17a2 2 0 104 0m-4 0a2 2 0 114 0m6 0a2 2 0 104 0m-4 0a2 2 0 114 0"></path></svg>
+                </div>
+                <div>
+                    <p class="text-[14px] font-medium text-gray-900" id="sync-title-tasks">Syncing Tasks...</p>
+                    <p class="text-[12px] text-gray-500" id="sync-detail-tasks">Waiting for agent</p>
+                </div>
+            </div>
+            <div class="status-icon" id="sync-status-tasks">
+                <svg class="animate-spin w-5 h-5 text-gray-300" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    if (typeof bookNow === 'undefined') {
+        window.bookNow = async function(trainId, btn) {
+            // Remove blue borders from all cards
+            document.querySelectorAll("[id^='card-']").forEach(c => c.classList.remove('border-[#0066ff]', 'ring-1', 'ring-[#0066ff]'));
+            // Add blue border to selected card
+            const card = document.getElementById('card-' + trainId);
+            if (card) card.classList.add('border-[#0066ff]', 'ring-1', 'ring-[#0066ff]');
+        
+            // Show panel and reset states
+            const panel = document.getElementById('sync-panel');
+            if (panel) panel.classList.remove('hidden');
+            
+            ['calendar', 'gmail', 'tasks'].forEach(step => {
+                const row = document.getElementById('sync-row-' + step);
+                if (row) {
+                    row.classList.remove('bg-white', 'opacity-100', 'shadow-sm', 'border-gray-200');
+                    row.classList.add('opacity-50', 'bg-gray-50');
+                }
+                const icon = document.getElementById('sync-status-' + step);
+                if (icon) {
+                    icon.innerHTML = '<svg class="animate-spin w-5 h-5 text-[#0066ff]" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>';
+                }
+            });
+
+            const formData = new FormData();
+            formData.append('train_id', trainId);
+            formData.append('source', '{{ source|default("") }}');
+            formData.append('destination', '{{ destination|default("") }}');
+            formData.append('date', '{{ date|default("") }}');
+
+            try {
+                const response = await fetch('/confirm', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if(!response.ok) {
+                    console.error("Confirmation failed", response.status);
+                    return;
+                }
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+                
+                while (true) {
+                    const {done, value} = await reader.read();
+                    if (done) break;
+                    buffer += decoder.decode(value, {stream: true});
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop(); // Keep the last incomplete line in buffer
+                    
+                    for(let line of lines) {
+                        if(line.startsWith('data: ')) {
+                            const dataStr = line.substring(6).trim();
+                            if(dataStr.length > 0) {
+                                try {
+                                    const ev = JSON.parse(dataStr);
+                                    updateSyncState(ev.step, ev.status, ev.detail);
+                                } catch (err) {}
+                            }
+                        }
+                    }
+                }
+            } catch(e) {
+                console.error("SSE Error", e);
+            }
+        };
+
+        window.updateSyncState = function(step, status, detail) {
+            const row = document.getElementById('sync-row-' + step);
+            const iconWrap = document.getElementById('sync-status-' + step);
+            const titleEl = document.getElementById('sync-title-' + step);
+            const detailEl = document.getElementById('sync-detail-' + step);
+            
+            if(!row) return;
+
+            row.classList.remove('opacity-50', 'bg-gray-50');
+            row.classList.add('bg-white', 'opacity-100', 'shadow-sm', 'border-gray-200');
+
+            if(detail) detailEl.textContent = detail;
+
+            if(status === 'done') {
+                if(step === 'calendar') titleEl.textContent = 'Calendar event created';
+                if(step === 'gmail') titleEl.textContent = 'Gmail travel notice created';
+                if(step === 'tasks') titleEl.textContent = 'Cab reminder set';
+                
+                iconWrap.innerHTML = '<svg class="w-5 h-5 text-green-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"></path></svg>';
+            } else if (status === 'error') {
+                titleEl.classList.add('text-red-500');
+                titleEl.textContent = 'Sync failed';
+                iconWrap.innerHTML = '<svg class="w-5 h-5 text-red-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12" stroke-linecap="round" stroke-linejoin="round"></path></svg>';
+            }
+        };
+    }
+</script>

@@ -1,0 +1,6 @@
+<div class="mt-4 p-3 bg-[#f0f7ff] border-l-4 border-[#0066ff] rounded-r-[8px] text-[13px] text-gray-800">
+    {% set parts = train.reason.split('. ') %}
+    <p><strong>{{ parts[0] }}{% if parts|length > 1 %}.{% endif %}</strong> 
+    {% if parts|length > 1 %}{{ parts[1:] | join('. ') }}{% endif %}</p>
+    <p class="mt-2 text-gray-500 font-medium">Reliability: {{ (train.reliability_score * 100)|round|int }}%</p>
+</div>

@@ -1,0 +1,64 @@
+<div class="bg-[#1e1f2e] rounded-[16px] md:p-[28px_24px] p-6 shadow-lg">
+    <form action="/ui" method="GET" class="space-y-4">
+        <div class="grid grid-cols-1 md:grid-cols-[1fr_1fr_160px_1fr] gap-4">
+            <!-- Source Station -->
+            <div class="flex flex-col">
+                <label class="text-[12px] text-[#9899b3] mb-1">Source Station</label>
+                <input type="text" name="source" placeholder="e.g. Mumbai" value="{{ source|default('') }}" required
+                    class="bg-[#2a2b3d] border border-[#3a3b52] rounded-[10px] text-[#e8e9f5] placeholder-[#555670] focus:border-[#7c6fff] focus:ring-1 focus:ring-[#7c6fff] outline-none px-3 py-2 text-[14px]">
+            </div>
+            <!-- Destination Station -->
+            <div class="flex flex-col">
+                <label class="text-[12px] text-[#9899b3] mb-1">Destination Station</label>
+                <input type="text" name="destination" placeholder="e.g. Delhi" value="{{ destination|default('') }}" required
+                    class="bg-[#2a2b3d] border border-[#3a3b52] rounded-[10px] text-[#e8e9f5] placeholder-[#555670] focus:border-[#7c6fff] focus:ring-1 focus:ring-[#7c6fff] outline-none px-3 py-2 text-[14px]">
+            </div>
+            <!-- Travel Date -->
+            <div class="flex flex-col">
+                <label class="text-[12px] text-[#9899b3] mb-1">Travel Date</label>
+                <input type="date" name="date" value="{{ date|default('') }}" required id="travel-date"
+                    class="bg-[#2a2b3d] border border-[#3a3b52] rounded-[10px] text-[#e8e9f5] placeholder-[#555670] focus:border-[#7c6fff] focus:ring-1 focus:ring-[#7c6fff] outline-none px-3 py-2 text-[14px] [color-scheme:dark]">
+            </div>
+            <!-- Preference -->
+            <div class="flex flex-col relative" id="preference-container">
+                <label class="text-[12px] text-[#9899b3] mb-1">Preference <span class="text-[#555670]">(optional)</span></label>
+                <input type="text" name="preference" id="preference-input" placeholder="e.g. Least delay" value="{{ preference|default('') }}" autocomplete="off"
+                    class="bg-[#2a2b3d] border border-[#3a3b52] rounded-[10px] text-[#e8e9f5] placeholder-[#555670] focus:border-[#7c6fff] focus:ring-1 focus:ring-[#7c6fff] outline-none px-3 py-2 text-[14px] w-full">
+                
+                <!-- Dropdown -->
+                <div id="preference-dropdown" class="hidden absolute top-full left-0 right-0 mt-1 bg-[#2a2b3d] border border-[#3a3b52] rounded-[10px] shadow-xl z-20 overflow-hidden">
+                    <div class="text-[11px] text-[#555670] px-3 py-2 uppercase tracking-wide">Suggested</div>
+                    <ul id="suggestion-list" class="text-[13px] text-[#e8e9f5]">
+                        <li><button type="button" class="sugg-btn w-full text-left px-3 py-2 hover:bg-[#35364d]">Least delay</button></li>
+                        <li><button type="button" class="sugg-btn w-full text-left px-3 py-2 hover:bg-[#35364d]">Fastest journey</button></li>
+                        <li><button type="button" class="sugg-btn w-full text-left px-3 py-2 hover:bg-[#35364d]">Earliest arrival</button></li>
+                        <li><button type="button" class="sugg-btn w-full text-left px-3 py-2 hover:bg-[#35364d]">Cheapest (if available)</button></li>
+                        <li><button type="button" class="sugg-btn w-full text-left px-3 py-2 hover:bg-[#35364d]">No specific preference</button></li>
+                    </ul>
+                    <div id="custom-preference-wrapper" class="hidden border-t border-[#3a3b52]">
+                        <button type="button" id="custom-preference-btn" class="w-full text-left px-3 py-2 hover:bg-[#35364d] text-[13px] text-[#7c6fff]">
+                            Use "<span id="custom-text"></span>"
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <script>
+            // Set default date if not set
+            if(!document.getElementById('travel-date').value) {
+                const today = new Date();
+                const dd = String(today.getDate()).padStart(2, '0');
+                const mm = String(today.getMonth() + 1).padStart(2, '0');
+                const yyyy = today.getFullYear();
+                document.getElementById('travel-date').value = yyyy + '-' + mm + '-' + dd;
+            }
+        </script>
+        
+        <div class="mt-4 pt-1">
+            <button type="submit" class="w-full bg-[#6c63f5] hover:bg-[#5a52d5] text-white font-medium py-3 px-4 rounded-[10px] text-[15px] transition-colors">
+                ✦ Generate Recommendations
+            </button>
+        </div>
+    </form>
+</div>
