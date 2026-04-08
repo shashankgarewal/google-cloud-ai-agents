@@ -14,6 +14,7 @@ class _TrainInfo(BaseModel):
     arrival_time: str = Field(..., description="Scheduled arrival time (ISO-8601 or HH:MM)")
     delay_minutes: Optional[int] = Field(None, description="Current delay in minutes (None = unknown)")
     stations: Optional[List[str]] = Field(None, description="Intermediate halt stations")
+    buy_now_link: str = Field(..., description="Link to book the train on MakeMyTrip")
 
 
 class TrainDataResponse(BaseModel):
@@ -29,6 +30,7 @@ class _Recommendation(BaseModel):
         ..., ge=0.0, le=1.0, description="LLM-assigned reliability score between 0 and 1"
     )
     reason: str = Field(..., description="Short LLM-generated reason for the ranking")
+    buy_now_link: str = Field(..., description="Link to book the train on MakeMyTrip")
 
     @field_validator("reliability_score")
     @classmethod
