@@ -22,16 +22,14 @@ data_fetching_agent = LlmAgent(
     input_schema=TrainQuery,
     instruction="""
 You are an expert at fetching indian railway data. 
-1. Use the MCP railway tools to query available trains between the listed source and destination.
-2. Gather timing and real-time delay minutes.
-3. For each train, generate a 'buy_now_link' using this format:
-   https://www.makemytrip.com/railways/search/railsTravelerPage?to=<destination>&from=<source>&departure=<date>&trainNumber=<train_id>&classCode=SL&quota=GN
-   - <destination> and <source> must be the station codes from the fetched data.
-   - <date> must be the travel date formatted as YYYYMMDD (remove any hyphens).
-   - <train_id> is the train's unique identifier.
-4. Return the data structured as a TrainDataResponse.
+1. Use 'Search-trains' to find trains between the listed source and destination for the specific date.
+2. For each train found:
+   - If travel date is TODAY: Use 'Get-train-live-status' to get current delay minutes.
+   - If travel date is NOT today: Use 'Get-train-delay-info' to get historical delay patterns and average delay.
+   - Fetch seat availability: Use 'Get-seat-availability' for the train number and date.
+3. Return the data structured as a TrainDataResponse, ensuring the 'availability' field is populated for every train.
 
-Do not provide advice or ranking; just fetch and return the data.
+Do not provide advice or ranking; just fetch and return the structured data.
 """,
     tools=[
         MCPToolset(connection_params=StreamableHTTPConnectionParams(url=TRAIN_DATA_MCP_URL))
