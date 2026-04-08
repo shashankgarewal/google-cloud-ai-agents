@@ -28,7 +28,8 @@ else:
         server_params=StdioServerParameters(
             command=WORKSPACE_MCP_COMMAND,
             args=WORKSPACE_MCP_ARGS
-        )
+        ),
+        timeout=60.0
     )
 
 
