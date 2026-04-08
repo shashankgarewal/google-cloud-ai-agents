@@ -1,9 +1,23 @@
 {% extends "base.html" %}
 
 {% block content %}
+{% if auth_error %}
+<div class="mt-6 mx-auto max-w-xl">
+    <div class="flex items-start gap-3 bg-red-50 border border-red-200 rounded-2xl px-5 py-4 text-red-800">
+        <svg class="w-5 h-5 mt-0.5 shrink-0 text-red-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+        </svg>
+        <div>
+            <p class="font-semibold text-sm">Sign-in error</p>
+            <p class="text-sm mt-0.5">{{ auth_error }}</p>
+        </div>
+    </div>
+</div>
+{% endif %}
 <div class="mt-8 flex justify-center">
     <div class="w-full">
         {% include "partials/search_form.html" %}
     </div>
 </div>
 {% endblock %}
+
