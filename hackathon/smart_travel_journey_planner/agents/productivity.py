@@ -3,14 +3,80 @@ agents/productivity.py
 Autonomously creates Google Tasks, Calendar events, and Gmail drafts.
 """
 
-from google.adk.agents import LlmAgent
-from google.adk.tools.mcp_tool.mcp_toolset import MCPToolset, StreamableHTTPConnectionParams, StdioConnectionParams, StdioServerParameters
-
-# from mcp import StdioServerParameters
-from schemas.output_schemas import TrainRecommendationResponse
-
-from dotenv import load_dotenv
+from __future__ import annotations
 import os
+import sys
+import logging
+from typing import List, Optional
+from dotenv import load_dotenv
+
+from google.adk.agents import LlmAgent
+from google.adk.tools.mcp_tool.mcp_toolset import McpToolset, MCPTool as McpTool, BaseTool, StreamableHTTPConnectionParams, StdioConnectionParams, StdioServerParameters
+from google.adk.agents.readonly_context import ReadonlyContext
+from mcp.types import ListToolsResult
+
+from schemas.output_schemas import TrainRecommendationResponse
+from schemas.productivity_schemas import ManageEventParams, ManageTaskParams, CreateDraftParams
+
+logger = logging.getLogger(__name__)
+
+# --- PATCHED TOOLSET ---
+
+class PatchedMcpToolset(McpToolset):
+    """
+    A specialized McpToolset that repairs tool schemas for Vertex AI compatibility.
+    It performs two fixes:
+    1. Universal: Ensures all parameters with 'items' have an explicit 'type': 'array'.
+    2. Explicit: Overrides problematic core tools with clean Pydantic schemas.
+    """
+
+    async def get_tools(self, readonly_context: Optional[ReadonlyContext] = None) -> List[BaseTool]:
+        # Fetch original tools from the MCP server
+        tools_response: ListToolsResult = await self._execute_with_session(
+            lambda session: session.list_tools(),
+            "Failed to get tools from MCP server",
+            readonly_context,
+        )
+
+        explicit_schemas = {
+            "manage_event": ManageEventParams,
+            "manage_task": ManageTaskParams,
+            "create_draft": CreateDraftParams,
+        }
+
+        tools = []
+        for tool in tools_response.tools:
+            # 1. UNIVERSAL PATCH: Fix missing 'type' for array-like parameters
+            if hasattr(tool, "inputSchema") and "properties" in tool.inputSchema:
+                for prop_name, prop_data in tool.inputSchema["properties"].items():
+                    if isinstance(prop_data, dict) and "items" in prop_data and "type" not in prop_data:
+                        prop_data["type"] = "array"
+                        logger.info(f"Patched missing array type for tool '{tool.name}' parameter '{prop_name}'")
+
+            # 2. EXPLICIT MAPPING: Swap in clean Pydantic schemas for high-priority tools
+            target_schema = explicit_schemas.get(tool.name)
+            
+            mcp_tool = McpTool(
+                mcp_tool=tool,
+                mcp_session_manager=self._mcp_session_manager,
+                auth_scheme=self._auth_scheme,
+                auth_credential=self._auth_credential,
+                require_confirmation=self._require_confirmation,
+                header_provider=self._header_provider,
+                progress_callback=self._progress_callback if hasattr(self, "_progress_callback") else None,
+            )
+
+            # Manually override the input_schema if we have a better one
+            if target_schema:
+                mcp_tool.input_schema = target_schema
+                logger.info(f"Applied explicit Pydantic schema override for tool '{tool.name}'")
+
+            if self._is_tool_selected(mcp_tool, readonly_context):
+                tools.append(mcp_tool)
+
+        return tools
+
+# --- CONFIGURATION ---
 
 load_dotenv()
 
@@ -217,6 +283,6 @@ If any tool call fails:
   fall back to sending — report the failure and stop.
 """,
     tools=[
-        MCPToolset(connection_params=connection_params)
+        PatchedMcpToolset(connection_params=connection_params)
     ]
 )
