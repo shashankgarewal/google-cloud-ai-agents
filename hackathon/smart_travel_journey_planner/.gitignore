@@ -11,6 +11,7 @@ env/
 
 # Secrets — never commit real keys
 .env
+credentials/
 
 # Editor
 .vscode/
