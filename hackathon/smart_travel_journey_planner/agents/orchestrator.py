@@ -3,9 +3,11 @@ agents/orchestrator.py
 LLM-powered planner / coordinator.
 This is the root of the agent hierarchy.
 """
+
 from __future__ import annotations
 from google.adk.agents import LlmAgent
 from agents.data_fetcher import data_fetching_agent
+from agents.response import response_agent
 from schemas.input_schemas import TrainQuery
 
 
@@ -18,7 +20,11 @@ You are the lead Train Recommendation AI.
 Receiving a valid TrainQuery. 
 1. DELEGATE to 'data_fetching_agent' to get live train options and delays.
 2. ANALYZE the results yourself. Compare trains based on timing, reliability (low delay), and user preferences (default: less expected delay and official travel time).
+3. GENERATE a ranked recommendation.
+4. DELEGATE the final JSON to 'response_agent' to ensure perfect formatting.
+
+If you don't receive response in valid schema, just guide use about valid schema that you support.
 """,
     input_schema=TrainQuery,
-    sub_agents=[data_fetching_agent],
+    sub_agents=[data_fetching_agent, response_agent],
 )

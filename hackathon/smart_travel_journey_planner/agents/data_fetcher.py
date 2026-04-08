@@ -11,7 +11,7 @@ from schemas.input_schemas import TrainQuery
 from dotenv import load_dotenv
 import os
 
-load_dotenv("../.env")
+load_dotenv()
 TRAIN_DATA_MCP_URL = os.getenv("TRAIN_DATA_MCP_URL")
 
 
@@ -31,5 +31,5 @@ Do not provide advice or ranking; just fetch and return the data.
     tools=[
         MCPToolset(connection_params=StreamableHTTPConnectionParams(url=TRAIN_DATA_MCP_URL))
     ],
-    response_schema=TrainDataResponse
+    output_schema=TrainDataResponse
 )
