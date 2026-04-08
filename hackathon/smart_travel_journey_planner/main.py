@@ -96,11 +96,20 @@ async def generate_recommendations(
         logger.info("recommendor_agent responded (%d chars)", len(rec_text))
 
         # The recommendor has output_schema=TrainRecommendationResponse so ADK
-        # should return structured JSON — try to parse it.
+        # should return structured JSON — try every JSON object in the response
+        # until one validates against TrainRecommendationResponse.
         import re
-        json_match = re.search(r"\{.*\}", rec_text, re.DOTALL)
-        if json_match:
-            final_rec = TrainRecommendationResponse.model_validate_json(json_match.group())
+        json_candidates = re.findall(r"\{.*?\}", rec_text, re.DOTALL)
+        # Also try the full greedy match as last resort
+        greedy_match = re.search(r"\{.*\}", rec_text, re.DOTALL)
+        if greedy_match and greedy_match.group() not in json_candidates:
+            json_candidates.append(greedy_match.group())
+        for candidate in json_candidates:
+            try:
+                final_rec = TrainRecommendationResponse.model_validate_json(candidate)
+                break  # Found a valid response
+            except Exception:
+                continue  # Try next candidate
     except Exception as exc:
         logger.warning("recommendor_agent failed or returned invalid JSON: %s", exc)
 

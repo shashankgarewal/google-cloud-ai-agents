@@ -10,7 +10,9 @@ COPY requirements.txt .
 # Install dependencies, ensuring sse-starlette and jinja2 are included 
 # which main.py depends on via fastapi.templating and sse_starlette
 RUN pip install --no-cache-dir -r requirements.txt
-RUN pip install --no-cache-dir jinja2 sse-starlette
+
+# Install uv so that `uvx workspace-mcp` is available at runtime (stdio MCP mode)
+RUN pip install --no-cache-dir uv
 
 COPY . .
 
