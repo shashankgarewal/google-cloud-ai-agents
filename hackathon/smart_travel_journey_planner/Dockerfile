@@ -2,22 +2,28 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install system dependencies if required for some packages
-# RUN apt-get update && apt-get install -y ...
+# ---- System dependencies ----
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
 
+# ---- Python dependencies ----
+# workspace-mcp is in requirements.txt → installed to /usr/local/bin/workspace-mcp
 COPY requirements.txt .
-
-# Install dependencies, ensuring sse-starlette and jinja2 are included 
-# which main.py depends on via fastapi.templating and sse_starlette
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Install uv so that `uvx workspace-mcp` is available at runtime (stdio MCP mode)
-RUN pip install --no-cache-dir uv
-
+# ---- Application code ----
 COPY . .
 
-# Expose port that Cloud Run expects
-EXPOSE 8080
+# ---- Pre-baked credentials ----
+# credentials/ is populated locally by running: python setup_credentials.py
+# It is gitignored but NOT dockerignored — included in the build context.
+# This copies  credentials/<email>.json  into the standard workspace-mcp
+# credentials directory so --single-user mode works without any browser auth.
+RUN mkdir -p /root/.google_workspace_mcp/credentials
+COPY credentials/ /root/.google_workspace_mcp/credentials/
 
-# Cloud Run injects the PORT environment variable, so we use it here.
-CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8080}"]
+# ---- Runtime ----
+# Cloud Run injects PORT; fall back to 8080 for local docker run.
+EXPOSE 8080
+CMD exec uvicorn main:app --host 0.0.0.0 --port ${PORT:-8080} --workers 1
