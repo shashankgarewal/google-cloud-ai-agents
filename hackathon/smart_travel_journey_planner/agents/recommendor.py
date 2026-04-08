@@ -62,7 +62,7 @@ RANKING CRITERIA:
 
 INSTRUCTIONS:
 1. Assign a reliability_score between 0.0 and 1.0 based on delay data.
-   - Formula: (1 - delay_minutes) / (1 + delay_minutes), clamped to [0.0, 1.0].
+   - Formula: max(0.0, 1.0 - (delay_minutes / 120.0)). (E.g., 0 delay = 1.0, 60m delay = 0.5, >=120m delay = 0.0). Ignore None.
 2. Select ONE recommended_train (the best fit) and up to 2 alternatives.
 3. For buy_now_link use this URL format:
    https://www.makemytrip.com/railways/search/railsTravelerPage?to=DEST&from=SRC&departure=YYYYMMDD&trainNumber=TRAINID&classCode=SL&quota=GN
