@@ -26,6 +26,8 @@ class TrainDataResponse(BaseModel):
 class _Recommendation(BaseModel):
     train_id: str = Field(..., description="Train identifier")
     train_name: str = Field(..., description="Train name")
+    departure_time: str = Field(..., description="Departure time")
+    arrival_time: str = Field(..., description="Arrival time")
     reliability_score: float = Field(
         ..., ge=0.0, le=1.0, description="LLM-assigned reliability score between 0 and 1"
     )
@@ -39,6 +41,9 @@ class _Recommendation(BaseModel):
 
 
 class TrainRecommendationResponse(BaseModel):
+    source: str = Field(..., description="Departure station name")
+    destination: str = Field(..., description="Arrival station name")
+    date: str = Field(..., description="Travel date in YYYY-MM-DD format")
     recommended_train: _Recommendation = Field(..., description="Top-ranked train")
     alternatives: List[_Recommendation] = Field(
         ..., description="Up to 2 alternative trains"
