@@ -2,8 +2,9 @@
 output schemas — used for agent-to-agent communication.
 TrainDataAgent → OrchestratorAgent boundary.
 """
-from typing import List, Optional
-from pydantic import BaseModel, Field
+
+from typing import Any, Dict, List, Optional
+from pydantic import BaseModel, Field, field_validator
 
 
 class _TrainInfo(BaseModel):
@@ -20,3 +21,26 @@ class TrainDataResponse(BaseModel):
     source: str = Field(..., description="Queried source station")
     destination: str = Field(..., description="Queried destination station")
     date: str = Field(..., description="Queried travel date")
+
+class _Recommendation(BaseModel):
+    train_id: str = Field(..., description="Train identifier")
+    train_name: str = Field(..., description="Train name")
+    reliability_score: float = Field(
+        ..., ge=0.0, le=1.0, description="LLM-assigned reliability score between 0 and 1"
+    )
+    reason: str = Field(..., description="Short LLM-generated reason for the ranking")
+
+    @field_validator("reliability_score")
+    @classmethod
+    def clamp_score(cls, v: float) -> float:
+        return round(max(0.0, min(1.0, v)), 4)
+
+
+class TrainRecommendationResponse(BaseModel):
+    recommended_train: _Recommendation = Field(..., description="Top-ranked train")
+    alternatives: List[_Recommendation] = Field(
+        ..., description="Up to 2 alternative trains"
+    )
+    insights: Dict[str, Any] = Field(
+        ..., description="Additional LLM-generated insights about the route / options"
+    )
