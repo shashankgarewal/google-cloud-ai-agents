@@ -12,16 +12,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# ---- uv (fallback — lets `uvx workspace-mcp` work if the pip binary is missing) ----
+RUN pip install --no-cache-dir uv
+
 # ---- Application code ----
 COPY . .
 
-# ---- Pre-baked credentials ----
-# credentials/ is populated locally by running: python setup_credentials.py
-# It is gitignored but NOT dockerignored — included in the build context.
-# This copies  credentials/<email>.json  into the standard workspace-mcp
-# credentials directory so --single-user mode works without any browser auth.
+# ---- Credential directory ----
+# Created at build time so it exists; populated at runtime via the web OAuth flow.
+# Pre-baked credentials can also be volume-mounted here for zero-cold-start auth.
 RUN mkdir -p /root/.google_workspace_mcp/credentials
-COPY credentials/ /root/.google_workspace_mcp/credentials/
 
 # ---- Runtime ----
 # Cloud Run injects PORT; fall back to 8080 for local docker run.

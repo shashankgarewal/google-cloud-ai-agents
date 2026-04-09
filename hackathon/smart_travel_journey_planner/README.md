@@ -33,19 +33,13 @@ pip install -r requirements.txt
 ```
 
 ### 3. Environment Variables
-Copy `.env-template` to `.env` and fill in your keys (especially `GOOGLE_OAUTH_CLIENT_ID` and `SECRET`).
+Copy `.env-template` to `.env` and fill in the required keys.
 ```bash
 cp .env-template .env
 ```
+Ensure you provide required Model and Workspace MCP configurations.
 
-### 4. Authenticate Google Workspace
-Run this script once to link your Google account (for Calendar, Gmail, Tasks):
-```bash
-python setup_credentials.py
-```
-This opens a browser for login and saves credentials to `credentials/` (for Docker) and your home directory (for local dev). Update `USER_GOOGLE_EMAIL` in your `.env` to match the account you used.
-
-### 5. Run the Server
+### 4. Run the Server
 Use Uvicorn via `main.py` directly:
 ```bash
 python main.py
@@ -128,19 +122,19 @@ Deploying to Cloud Run involves three broad steps.
 ### 1. Set up Infrastructure
 Enable Google APIs, create Service Accounts, and assign necessary IAM roles.
 ```bash
-./shell/setup_infrastructure.sh
+./setup_infrastructure.sh
 ```
 
 ### 2. Set up Deployment Defaults
 Configure deployment APIs and assign roles for Cloud Build and Compute.
 ```bash
-./shell/setup_defaults.sh
+./setup_defaults.sh
 ```
 
 ### 3. Deploy to Cloud Run
 Build the Docker image and deploy it.
 ```bash
-./shell/deploy_cloud_run.sh
+./deploy_cloud_run.sh
 ```
 
 > NOTE: Windows users can utilize the `.ps1` equivalents mapping to the same deployment phases.

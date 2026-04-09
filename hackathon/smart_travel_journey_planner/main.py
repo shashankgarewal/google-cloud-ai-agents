@@ -16,13 +16,14 @@ GET  /check-auth               JSON: confirms workspace-mcp auth status
 SINGLE-USER MODE
 -----------------
 This app uses workspace-mcp in --single-user mode.  Credentials for
-USER_GOOGLE_EMAIL are cached on disk by setup_credentials.py.
+USER_GOOGLE_EMAIL are cached on disk by authenticate_workspace.py.
 No per-request OAuth flow is needed — set USER_GOOGLE_EMAIL in .env
-and run `python setup_credentials.py` once before starting.
+and run `python authenticate_workspace.py` once before starting.
 """
 from __future__ import annotations
 
 import asyncio
+import glob
 import json
 import logging
 import os
@@ -30,7 +31,7 @@ from typing import Optional
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 from pydantic import BaseModel
@@ -45,18 +46,67 @@ from agents.data_fetcher import data_fetching_agent
 from agents.recommendor import recommendor_agent
 from agents.productivity import get_productivity_agent
 
-load_dotenv(override=True)
+load_dotenv()
 
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Single-user configuration
+# Multi-user Google OAuth 2.0 configuration
 # ---------------------------------------------------------------------------
-# Set USER_GOOGLE_EMAIL in .env.  Before building the Docker image, run:
-#   python setup_credentials.py
-# This writes credentials/<email>.json which the Dockerfile copies into the image.
-USER_GOOGLE_EMAIL = os.getenv("USER_GOOGLE_EMAIL", "")
+GOOGLE_OAUTH_CLIENT_ID     = os.getenv("GOOGLE_OAUTH_CLIENT_ID", "")
+GOOGLE_OAUTH_CLIENT_SECRET = os.getenv("GOOGLE_OAUTH_CLIENT_SECRET", "")
+GOOGLE_OAUTH_REDIRECT_URI  = os.getenv("GOOGLE_OAUTH_REDIRECT_URI", "http://127.0.0.1:8000/auth/callback")
 
+# Workspace + identity scopes requested in a single OAuth consent
+OAUTH_SCOPES = [
+    "openid",
+    "https://www.googleapis.com/auth/userinfo.email",
+    "https://www.googleapis.com/auth/userinfo.profile",
+    "https://www.googleapis.com/auth/calendar",
+    "https://www.googleapis.com/auth/gmail.compose",
+    "https://www.googleapis.com/auth/gmail.readonly",
+    "https://www.googleapis.com/auth/tasks",
+]
+
+# Fallback email used only by /dev/test-confirm (when no session user)
+_DEV_FALLBACK_EMAIL = os.getenv("USER_GOOGLE_EMAIL", "")
+
+
+def _make_oauth_flow(redirect_uri: str = ""):
+    """Build a google_auth_oauthlib Flow from env credentials."""
+    from google_auth_oauthlib.flow import Flow  # lazy import
+    uri = redirect_uri or GOOGLE_OAUTH_REDIRECT_URI
+    return Flow.from_client_config(
+        {
+            "web": {
+                "client_id":     GOOGLE_OAUTH_CLIENT_ID,
+                "client_secret": GOOGLE_OAUTH_CLIENT_SECRET,
+                "redirect_uris": [uri],
+                "auth_uri":  "https://accounts.google.com/o/oauth2/auth",
+                "token_uri": "https://oauth2.googleapis.com/token",
+            }
+        },
+        scopes=OAUTH_SCOPES,
+        redirect_uri=uri,
+    )
+
+
+def _get_redirect_uri(request: Request) -> str:
+    """
+    Derive the OAuth redirect URI from the actual request.
+    - If GOOGLE_OAUTH_REDIRECT_URI is explicitly set in env (non-default), use it.
+    - Otherwise auto-detect from request.base_url so it works on:
+        * Local dev  : http://127.0.0.1:8000/auth/callback
+        * Cloud Run  : https://<service>.a.run.app/auth/callback
+        * Any proxy  : https://<custom-domain>/auth/callback
+    """
+    env_val = GOOGLE_OAUTH_REDIRECT_URI.strip()
+    default  = "http://127.0.0.1:8000/auth/callback"
+    if env_val and env_val != default:
+        return env_val  # explicit override wins
+    # Auto-detect: use scheme+host from the incoming request
+    base = f"{request.url.scheme}://{request.url.netloc}"
+    return f"{base}/auth/callback"
 
 app = FastAPI(title="Smart Travel Journey Planner")
 
@@ -82,36 +132,36 @@ def _get_creds_dir() -> str:
 
 def _is_workspace_authenticated(email: str) -> bool:
     """True if a credential file with a refresh_token exists for *email*."""
+    import json as _json
     cred_file = os.path.join(_get_creds_dir(), f"{email}.json")
     if not os.path.exists(cred_file):
         return False
     try:
         with open(cred_file) as f:
-            data = json.load(f)
+            data = _json.load(f)
         return bool(data.get("refresh_token"))
     except Exception:
         return False
-
-
-def _get_configured_user() -> Optional[dict]:
-    """
-    Returns a user dict for the configured USER_GOOGLE_EMAIL if a valid
-    credential file exists on disk.  Returns None if not yet authenticated.
-    Used to drive the 'Productivity Unlocked' UI without any browser OAuth.
-    """
-    if not USER_GOOGLE_EMAIL:
-        return None
-    if not _is_workspace_authenticated(USER_GOOGLE_EMAIL):
-        return None
-    name = USER_GOOGLE_EMAIL.split("@")[0].replace(".", " ").title()
-    return {"email": USER_GOOGLE_EMAIL, "name": name, "picture": ""}
-
 
 # ---------------------------------------------------------------------------
 # In-memory train cache — populated by generate_recommendations() so that
 # /confirm and /ui/insight can look up trains by ID without re-running agents.
 # ---------------------------------------------------------------------------
 train_cache: dict[str, _Recommendation] = {}
+
+# Pre-seed with a stable test entry so /dev/test-confirm works without any search.
+# This uses zero Railway MCP calls and zero data-agent LLM calls.
+_TEST_TRAIN_ID = "TEST001"
+train_cache[_TEST_TRAIN_ID] = _Recommendation(
+    train_id=_TEST_TRAIN_ID,
+    train_name="Rajdhani Express (TEST)",
+    departure_time="16:55",
+    arrival_time="08:35",
+    reliability_score=0.95,
+    availability="Available",
+    reason="Pre-seeded test entry — triggers productivity agent without Railway MCP.",
+    buy_now_link="https://www.makemytrip.com/railways/",
+)
 
 
 # ---------------------------------------------------------------------------
@@ -229,27 +279,99 @@ async def generate_recommendations(
 
 @app.get("/", response_class=HTMLResponse)
 async def landing_page(request: Request):
-    user = _get_configured_user()
+    user = request.session.get("user")
     return templates.TemplateResponse("search.html", {"request": request, "user": user})
-
 
 
 @app.get("/check-auth")
 async def check_auth(request: Request):
-    """Returns workspace-mcp credential status for the configured user."""
-    authenticated = _is_workspace_authenticated(USER_GOOGLE_EMAIL) if USER_GOOGLE_EMAIL else False
+    """Returns session user info + workspace-mcp credential status."""
+    import glob
+    user = request.session.get("user", {})
+    email = user.get("email", "")
+    authenticated = _is_workspace_authenticated(email) if email else False
+    if not authenticated and not email:
+        creds_dir = _get_creds_dir()
+        files = glob.glob(os.path.join(creds_dir, "*.json"))
+        if files:
+            email = os.path.basename(files[0]).replace(".json", "")
+            authenticated = True
     return JSONResponse({
         "authenticated": authenticated,
-        "email": USER_GOOGLE_EMAIL,
-        "mode": "single-user",
+        "email": email,
+        "mode": "multi-user",
         "message": (
-            f"Ready — credentials loaded for {USER_GOOGLE_EMAIL}" if authenticated
-            else "Not authenticated — run: python setup_credentials.py"
+            f"Ready — using {email}" if authenticated
+            else "Not signed in — click Sign in to Unlock Productivity"
         )
     })
 
 
+@app.get("/login")
+async def login(request: Request, next: str = "/"):
+    """Starts Google OAuth 2.0 consent flow. Works on local dev and Cloud Run."""
+    if not GOOGLE_OAUTH_CLIENT_ID or not GOOGLE_OAUTH_CLIENT_SECRET:
+        return JSONResponse(
+            {"error": "GOOGLE_OAUTH_CLIENT_ID / GOOGLE_OAUTH_CLIENT_SECRET not set in .env"},
+            status_code=500,
+        )
+    redirect_uri = _get_redirect_uri(request)
+    flow = _make_oauth_flow(redirect_uri=redirect_uri)
+    auth_url, state = flow.authorization_url(
+        prompt="consent",
+        access_type="offline",
+        include_granted_scopes="true",
+    )
+    request.session["oauth_state"]        = state
+    request.session["oauth_next"]         = next
+    request.session["oauth_redirect_uri"] = redirect_uri  # store for callback parity
+    return RedirectResponse(auth_url)
 
+
+@app.get("/auth/callback")
+async def auth_callback(request: Request):
+    """Handles Google OAuth callback — works on local (http) and Cloud Run (https)."""
+    from googleapiclient.discovery import build as _google_build
+
+    state        = request.session.pop("oauth_state", None)
+    next_url     = request.session.pop("oauth_next", "/")
+    redirect_uri = request.session.pop("oauth_redirect_uri", _get_redirect_uri(request))
+
+    # Allow http only for local dev — Cloud Run uses HTTPS and doesn't need this
+    if redirect_uri.startswith("http://"):
+        os.environ.setdefault("OAUTHLIB_INSECURE_TRANSPORT", "1")
+
+    flow = _make_oauth_flow(redirect_uri=redirect_uri)
+    flow.fetch_token(authorization_response=str(request.url), state=state)
+    creds = flow.credentials
+
+    # Get user profile
+    user_service = _google_build("oauth2", "v2", credentials=creds)
+    user_info    = user_service.userinfo().get().execute()
+    email   = user_info["email"]
+    name    = user_info.get("name", email.split("@")[0])
+    picture = user_info.get("picture", "")
+
+    # Save in workspace-mcp credential format so --single-user mode works per-user
+    cred_dir  = _get_creds_dir()
+    os.makedirs(cred_dir, exist_ok=True)
+    cred_file = os.path.join(cred_dir, f"{email}.json")
+    with open(cred_file, "w") as f:
+        f.write(creds.to_json())
+    logger.info("Saved workspace-mcp credentials for %s → %s", email, cred_file)
+
+    # Store user + access_token in session
+    # access_token is passed as Bearer header to workspace-mcp (External OAuth Provider mode)
+    request.session["user"] = {"email": email, "name": name, "picture": picture}
+    request.session["access_token"] = creds.token  # used by productivity agent
+    return RedirectResponse(next_url)
+
+
+@app.get("/logout")
+async def logout(request: Request):
+    """Clears the session and redirects to home."""
+    request.session.clear()
+    return RedirectResponse("/")
 
 
 @app.post("/query")
@@ -296,7 +418,7 @@ async def ui_recommendations(
             pass
         _active_productivity_task = None
 
-    user = _get_configured_user()
+    user = request.session.get("user")
     rec = await generate_recommendations(source, destination, date, preference)
     return templates.TemplateResponse("recommendations.html", {
         "request": request,
@@ -322,8 +444,119 @@ async def insight_partial(request: Request, train_id: str):
 
 
 # ---------------------------------------------------------------------------
-# SSE: /confirm — book + run productivity agent
+# DEV: /dev/test-confirm — test productivity agent without any train search
 # ---------------------------------------------------------------------------
+
+@app.get("/dev/test-confirm", response_class=HTMLResponse)
+async def dev_test_confirm(request: Request):
+    """
+    Developer shortcut: test the Calendar + Gmail + Tasks productivity flow
+    without doing a full train search.  Uses the pre-seeded TEST001 entry.
+
+    Renders an inline page with the sync panel and fires /confirm immediately
+    on load — no Railway MCP, no data-fetching agents, no quota usage for search.
+
+    Open:  http://127.0.0.1:8000/dev/test-confirm
+    """
+    test_date = "2026-04-23"
+    html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Dev: Test Productivity Confirm</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>body {{ background:#f0f4f8; }}</style>
+</head>
+<body class="min-h-screen flex items-center justify-center p-8">
+  <div class="bg-white rounded-2xl shadow p-6 w-full max-w-md">
+    <div class="mb-4 p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-sm">
+      <strong>🛠 Dev test page</strong> — triggers productivity agent with a pre-seeded
+      test train. No Railway MCP or search agents are called.
+    </div>
+    <div class="mb-5 text-sm text-gray-600 space-y-1">
+      <div><span class="font-medium">Train:</span> Rajdhani Express (TEST001)</div>
+      <div><span class="font-medium">Route:</span> MUMBAI → DELHI</div>
+      <div><span class="font-medium">Date:</span> {test_date}</div>
+      <div><span class="font-medium">User:</span> {request.session.get('user', {}).get('email') or _DEV_FALLBACK_EMAIL or '(not signed in)'}</div>
+    </div>
+
+    <!-- Sync panel (copy of partials/sync_panel.html structure) -->
+    <div id="sync-panel" class="bg-white rounded-2xl p-5 border border-gray-100">
+      <h3 class="font-medium text-gray-700 text-[14px] mb-4">Synced with your services</h3>
+      <div class="space-y-4">
+        {"".join(f'''
+        <div id="sync-row-{step}" class="flex items-center justify-between p-3 rounded-xl border border-gray-100 opacity-50 bg-gray-50 transition-all">
+          <div><p class="text-[14px] font-medium text-gray-900" id="sync-title-{step}">Syncing {step}...</p>
+               <p class="text-[12px] text-gray-500" id="sync-detail-{step}">Waiting for agent</p></div>
+          <div id="sync-status-{step}">
+            <svg class="animate-spin w-5 h-5 text-blue-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+          </div>
+        </div>''' for step in ["calendar","gmail","tasks"])}
+      </div>
+    </div>
+    <button onclick="location.reload()" class="mt-4 w-full py-2 text-sm text-gray-500 hover:text-gray-700 border border-gray-200 rounded-xl hover:bg-gray-50 transition-all">
+      ↩ Re-run test
+    </button>
+  </div>
+
+  <script>
+  const DONE_ICON = '<svg class="w-5 h-5 text-green-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"></path></svg>';
+  const ERR_ICON  = '<svg class="w-5 h-5 text-red-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12" stroke-linecap="round" stroke-linejoin="round"></path></svg>';
+
+  function updateStep(step, status, detail) {{
+    const row    = document.getElementById('sync-row-'    + step);
+    const icon   = document.getElementById('sync-status-' + step);
+    const title  = document.getElementById('sync-title-'  + step);
+    const det    = document.getElementById('sync-detail-' + step);
+    if (!row) return;
+    row.classList.remove('opacity-50','bg-gray-50');
+    row.classList.add('bg-white','opacity-100','shadow-sm','border-gray-200');
+    if (detail) det.textContent = detail;
+    if (status === 'done') {{
+      icon.innerHTML = DONE_ICON;
+      title.textContent = {{calendar:'Calendar event created', gmail:'Gmail draft created', tasks:'Cab reminder set'}}[step] || 'Done';
+    }} else if (status === 'error') {{
+      icon.innerHTML = ERR_ICON;
+      title.classList.add('text-red-500');
+      title.textContent = 'Sync failed';
+    }}
+  }}
+
+  (async () => {{
+    const fd = new FormData();
+    fd.append('train_id',    '{_TEST_TRAIN_ID}');
+    fd.append('source',      'MUMBAI');
+    fd.append('destination', 'DELHI');
+    fd.append('date',        '{test_date}');
+
+    const resp = await fetch('/confirm', {{ method: 'POST', body: fd }});
+    if (!resp.ok) {{ console.error('Confirm failed', resp.status); return; }}
+
+    const reader  = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+    while (true) {{
+      const {{done, value}} = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, {{stream: true}});
+      const lines = buf.split('\\n');
+      buf = lines.pop();
+      for (const line of lines) {{
+        if (!line.startsWith('data: ')) continue;
+        try {{
+          const ev = JSON.parse(line.slice(6).trim());
+          if (ev.step) updateStep(ev.step, ev.status, ev.detail);
+        }} catch (_) {{}}
+      }}
+    }}
+  }})();
+  </script>
+</body>
+</html>"""
+    return HTMLResponse(html)
 
 
 # ---------------------------------------------------------------------------
@@ -545,23 +778,16 @@ async def _productivity_sse(
 async def confirm_booking(request: Request):
     """
     SSE endpoint — confirms a train and triggers the productivity agent.
-    Single-user mode: always uses USER_GOOGLE_EMAIL from env.
-    No session auth check needed — credentials are pre-baked in the image.
+    Single-user mode: uses USER_GOOGLE_EMAIL from .env directly.
     """
-    user_email = USER_GOOGLE_EMAIL
+    user      = request.session.get("user", {})
+    user_email = user.get("email", "")
     if not user_email:
-        async def _no_creds():
+        async def _no_auth():
             for step in ("calendar", "gmail", "tasks"):
                 yield {"data": json.dumps({"step": step, "status": "error",
-                                           "detail": "USER_GOOGLE_EMAIL not set. Run setup_credentials.py first."})}
-        return EventSourceResponse(_no_creds())
-
-    if not _is_workspace_authenticated(user_email):
-        async def _not_auth():
-            for step in ("calendar", "gmail", "tasks"):
-                yield {"data": json.dumps({"step": step, "status": "error",
-                                           "detail": "No credentials found. Run: python setup_credentials.py"})}
-        return EventSourceResponse(_not_auth())
+                                           "detail": "Not signed in — click \"Sign in to Unlock Productivity\""})}
+        return EventSourceResponse(_no_auth())
 
     content_type = request.headers.get("content-type", "")
     if "application/json" in content_type:
@@ -592,7 +818,8 @@ async def confirm_booking(request: Request):
         alternatives=[],
         insights={},
     )
-    return EventSourceResponse(_productivity_sse(action_input, user_email))
+    access_token = user.get("access_token", "") or request.session.get("access_token", "")
+    return EventSourceResponse(_productivity_sse(action_input, user_email, access_token=access_token))
 
 
 # ---------------------------------------------------------------------------
