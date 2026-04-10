@@ -1,288 +1,359 @@
 """
-agents/productivity.py
-Autonomously creates Google Tasks, Calendar events, and Gmail drafts.
+Productivity agent — uses workspace-mcp in External OAuth Provider mode.
+
+Architecture
+------------
+workspace-mcp now runs as a persistent HTTP server (--transport streamable-http)
+with EXTERNAL_OAUTH21_PROVIDER=true.  Our FastAPI app already handles OAuth via
+/login → /auth/callback and stores the user's access_token in their session.
+
+For every productivity request we:
+  1. Pass the user's access_token as  "Authorization: Bearer <token>"  via
+     an ADK header_provider callback injected into McpToolset.
+  2. workspace-mcp validates the token against Google and routes all API calls
+     to that user's account — genuine multi-user isolation.
+
+No --single-user, no per-user subprocess hacks, no credential file sharing.
 """
 
 from __future__ import annotations
-import os
-import sys
+
+import asyncio
 import logging
-from typing import List, Optional
+import os
+import subprocess
+import sys
+import time
+from typing import Any, Dict, Optional
+
 from dotenv import load_dotenv
-
 from google.adk.agents import LlmAgent
-from google.adk.tools.mcp_tool.mcp_toolset import McpToolset, MCPTool as McpTool, BaseTool, StreamableHTTPConnectionParams, StdioConnectionParams, StdioServerParameters
+from google.adk.tools.mcp_tool.mcp_toolset import McpToolset
+from google.adk.tools.mcp_tool.mcp_session_manager import (
+    StdioConnectionParams,
+    StreamableHTTPConnectionParams,
+)
 from google.adk.agents.readonly_context import ReadonlyContext
-from mcp.types import ListToolsResult
+from mcp import StdioServerParameters
 
-from schemas.output_schemas import TrainRecommendationResponse
-from schemas.productivity_schemas import ManageEventParams, ManageTaskParams, CreateDraftParams
-
+load_dotenv()
 logger = logging.getLogger(__name__)
 
-# --- PATCHED TOOLSET ---
+# ---------------------------------------------------------------------------
+# Config
+# ---------------------------------------------------------------------------
+
+WORKSPACE_MCP_URL     = os.getenv("WORKSPACE_MCP_URL", "").strip()
+WORKSPACE_MCP_COMMAND = os.getenv("WORKSPACE_MCP_COMMAND", "workspace-mcp")
+WORKSPACE_MCP_HTTP_PORT = int(os.getenv("WORKSPACE_MCP_HTTP_PORT", "8765"))
+
+_raw_args = os.getenv("WORKSPACE_MCP_ARGS", "--tool-tier extended")
+# Strip any legacy flags that workspace-mcp no longer accepts
+for _bad in ("--single-user", "--multi-user"):
+    _raw_args = _raw_args.replace(_bad, "")
+WORKSPACE_MCP_ARGS = _raw_args.split()
+
+
+# ---------------------------------------------------------------------------
+# Binary detection (cross-platform)
+# ---------------------------------------------------------------------------
+
+def _find_mcp_executable() -> str:
+    """Return the path to the workspace-mcp binary, or the command fallback."""
+    base = os.path.dirname(os.path.dirname(__file__))
+    candidates = [
+        os.path.join(base, "venv", "Scripts", "workspace-mcp.exe"),  # Windows venv
+        os.path.join(base, "venv", "bin",     "workspace-mcp"),       # Linux venv
+        "/usr/local/bin/workspace-mcp",                                # Docker pip install
+        "/app/venv/bin/workspace-mcp",                                 # Docker /app workdir
+    ]
+    for path in candidates:
+        if os.path.exists(path):
+            logger.info("workspace-mcp binary: %s", path)
+            return path
+    logger.info("workspace-mcp not found in known paths — using: %s", WORKSPACE_MCP_COMMAND)
+    return WORKSPACE_MCP_COMMAND
+
+
+MCP_EXECUTABLE = _find_mcp_executable()
+
+
+# ---------------------------------------------------------------------------
+# HTTP server management
+# Workspace-mcp is launched once as a long-running HTTP server; all users
+# share the same process but are isolated via their Bearer access_token.
+# ---------------------------------------------------------------------------
+
+_mcp_http_proc: Optional[subprocess.Popen] = None
+_mcp_http_url:  str = ""
+
+
+def _ensure_mcp_http_server() -> str:
+    """
+    Ensure workspace-mcp is running as an HTTP server.
+    Returns the base URL (e.g. http://127.0.0.1:8765).
+    Idempotent — safe to call on every request.
+    """
+    global _mcp_http_proc, _mcp_http_url
+
+    # Re-use existing process if still alive
+    if _mcp_http_proc is not None and _mcp_http_proc.poll() is None:
+        return _mcp_http_url
+
+    port = WORKSPACE_MCP_HTTP_PORT
+    url  = f"http://127.0.0.1:{port}"
+
+    env = os.environ.copy()
+    env["EXTERNAL_OAUTH21_PROVIDER"] = "true"   # ← key flag: skip internal OAuth
+    env["PORT"]                       = str(port)
+
+    cmd = [
+        MCP_EXECUTABLE,
+        "--transport", "streamable-http",
+    ] + WORKSPACE_MCP_ARGS
+
+    logger.info("Starting workspace-mcp HTTP server: %s", " ".join(cmd))
+    try:
+        _mcp_http_proc = subprocess.Popen(
+            cmd,
+            env=env,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+        )
+        # Give it a moment to bind the port
+        time.sleep(1.5)
+        if _mcp_http_proc.poll() is not None:
+            err = (_mcp_http_proc.stderr.read() or b"").decode()
+            raise RuntimeError(f"workspace-mcp exited immediately: {err[:400]}")
+        _mcp_http_url = url
+        logger.info("workspace-mcp HTTP server ready at %s", url)
+        return url
+    except Exception as exc:
+        logger.error("Failed to start workspace-mcp HTTP server: %s", exc)
+        _mcp_http_proc = None
+        raise
+
+
+# ---------------------------------------------------------------------------
+# Patched toolset (schema fixes for Vertex AI compatibility)
+# ---------------------------------------------------------------------------
 
 class PatchedMcpToolset(McpToolset):
     """
-    A specialized McpToolset that repairs tool schemas for Vertex AI compatibility.
-    It performs two fixes:
-    1. Universal: Ensures all parameters with 'items' have an explicit 'type': 'array'.
-    2. Explicit: Overrides problematic core tools with clean Pydantic schemas.
+    Wraps McpToolset and repairs common workspace-mcp schema issues that cause
+    Vertex AI 400 INVALID_ARGUMENT errors.
+
+    Fixes applied per-tool on first get_tools() call:
+      • attendees: missing 'items' → inject  {"type": "string"}
+      • any other array-typed param missing 'items' → same fix
     """
 
-    async def get_tools(self, readonly_context: Optional[ReadonlyContext] = None) -> List[BaseTool]:
-        # Fetch original tools from the MCP server
-        tools_response: ListToolsResult = await self._execute_with_session(
-            lambda session: session.list_tools(),
-            "Failed to get tools from MCP server",
-            readonly_context,
-        )
-
-        explicit_schemas = {
-            "manage_event": ManageEventParams,
-            "manage_task": ManageTaskParams,
-            "create_draft": CreateDraftParams,
-        }
-
-        tools = []
-        for tool in tools_response.tools:
-            # 1. UNIVERSAL PATCH: Fix missing 'type' for array-like parameters
-            if hasattr(tool, "inputSchema") and "properties" in tool.inputSchema:
-                for prop_name, prop_data in tool.inputSchema["properties"].items():
-                    if isinstance(prop_data, dict) and "items" in prop_data and "type" not in prop_data:
-                        prop_data["type"] = "array"
-                        logger.info(f"Patched missing array type for tool '{tool.name}' parameter '{prop_name}'")
-
-            # 2. EXPLICIT MAPPING: Swap in clean Pydantic schemas for high-priority tools
-            target_schema = explicit_schemas.get(tool.name)
-            
-            mcp_tool = McpTool(
-                mcp_tool=tool,
-                mcp_session_manager=self._mcp_session_manager,
-                auth_scheme=self._auth_scheme,
-                auth_credential=self._auth_credential,
-                require_confirmation=self._require_confirmation,
-                header_provider=self._header_provider,
-                progress_callback=self._progress_callback if hasattr(self, "_progress_callback") else None,
+    async def get_tools(self, readonly_context=None):
+        tools = await super().get_tools(readonly_context)
+        for tool in tools:
+            schema = getattr(tool, "_tool_schema", None) or {}
+            params = (
+                schema.get("parameters", {})
+                      .get("properties", {})
             )
-
-            # Manually override the input_schema if we have a better one
-            if target_schema:
-                mcp_tool.input_schema = target_schema
-                logger.info(f"Applied explicit Pydantic schema override for tool '{tool.name}'")
-
-            if self._is_tool_selected(mcp_tool, readonly_context):
-                tools.append(mcp_tool)
-
+            for pname, pdef in (params or {}).items():
+                if pdef.get("type") == "array" and "items" not in pdef:
+                    pdef["items"] = {"type": "string"}
+                    logger.debug(
+                        "Patched schema for tool=%s param=%s",
+                        getattr(tool, "name", "?"), pname,
+                    )
         return tools
 
-# --- CONFIGURATION ---
 
-load_dotenv()
+# ---------------------------------------------------------------------------
+# Connection factory
+# ---------------------------------------------------------------------------
 
-# Configuration for Workspace MCP
-WORKSPACE_MCP_URL = os.getenv("WORKSPACE_MCP_URL")
-WORKSPACE_MCP_COMMAND = os.getenv("WORKSPACE_MCP_COMMAND", "uvx")
-WORKSPACE_MCP_ARGS = os.getenv("WORKSPACE_MCP_ARGS", "workspace-mcp --tool-tier core").split()
+def _make_connection_params(access_token: str) -> StreamableHTTPConnectionParams:
+    """
+    Build StreamableHTTPConnectionParams that injects the user's Bearer token
+    so workspace-mcp routes the request to the correct Google account.
+    """
+    if WORKSPACE_MCP_URL:
+        # Explicit override (e.g. Cloud Run sidecar or remote instance)
+        base_url = WORKSPACE_MCP_URL.rstrip("/")
+    else:
+        base_url = _ensure_mcp_http_server()
 
-if WORKSPACE_MCP_URL:
-    # Remote/Hosted mode
-    connection_params = StreamableHTTPConnectionParams(url=WORKSPACE_MCP_URL)
-else:
-    # Locally-managed mode (Stdio)
-    connection_params = StdioConnectionParams(
-        server_params=StdioServerParameters(
-            command=WORKSPACE_MCP_COMMAND,
-            args=WORKSPACE_MCP_ARGS
-        ),
-        timeout=60.0
+    mcp_endpoint = f"{base_url}/mcp"
+
+    def _header_provider(ctx: ReadonlyContext) -> Dict[str, str]:
+        return {"Authorization": f"Bearer {access_token}"}
+
+    return StreamableHTTPConnectionParams(
+        url=mcp_endpoint,
+        timeout=60.0,
+        headers={"Authorization": f"Bearer {access_token}"},
     )
 
 
-productivity_agent = LlmAgent(
-    name="productivity_agent",
-    model="gemini-2.5-flash",
-    description="Productivity assistant that manages Google Workspace (Tasks, Calendar, Gmail).",
-    input_schema=TrainRecommendationResponse,
-    instruction="""
-You are a productivity assistant for a train travel system. You receive a confirmed 
-train recommendation and autonomously execute three actions using your Google Workspace 
-tools.
+# ---------------------------------------------------------------------------
+# Agent factory
+# ---------------------------------------------------------------------------
 
-create a Google Tasks entry, a Google Calendar event, and a Gmail draft.
+def get_productivity_agent(user_email: str = "", access_token: str = "") -> LlmAgent:
+    """
+    Builds a fresh LlmAgent scoped to the authenticated user.
 
----
+    Parameters
+    ----------
+    user_email:
+        The signed-in user's Google email address (used in the agent prompt).
+    access_token:
+        The user's OAuth access_token (used as Bearer header to workspace-mcp).
+        Falls back to stdio / single-user mode when empty.
+    """
+    if not user_email:
+        user_email = os.getenv("USER_GOOGLE_EMAIL", "")
+    if not user_email:
+        user_email = "me"
 
-## INPUT
+    _instruction = f"""
+You are a productivity assistant for a train travel booking system.
 
-You will receive a TrainRecommendationResponse object. Extract the following fields 
-from recommended_train:
-- train_id         → e.g. "12787"
-- train_name       → e.g. "Hyderabad Express"
-- departure_time   → e.g. "06:45" or ISO-8601
-- arrival_time     → e.g. "22:30"
-- buy_now_link     → booking URL from MakeMyTrip
+You will receive a JSON object describing a confirmed train recommendation.
+Your job is to execute exactly THREE actions using your tools — no more, no less.
 
-You will also receive the top-level fields:
-- source           → departure station name
-- destination      → arrival station name  
-- date             → travel date in YYYY-MM-DD format
+The user's Google account email is: {user_email}
+Use this email as user_google_email in every tool call.
 
----
+============================================================
+STEP 1 — Google Tasks (manage_task)
+============================================================
+Create a reminder task with these exact parameters:
 
-## ACTION 1 — Google Tasks
+    action            = "create"
+    user_google_email = "{user_email}"
+    task_list_id      = "@default"
 
-Create a task in Google Tasks with the following structure:
+    title = "Book cab to <source> station"
 
-  Title:
-    "Book cab to <source> station for <train_id> – <train_name>"
+    due = RFC3339 timestamp computed as:
+        Logic: travel_date + departure_time minus 2 hours
+        Timestamp Format: YYYY-MM-DDTHH:MM:SSZ
+        Example:
+            travel_date="2026-04-17"
+            departure_time="06:45"
+            → due="2026-04-17T04:45:00Z"
 
-  Due date/time:
-    2 hours BEFORE departure_time on the travel date.
-    Example: if departure_time is "06:45" and date is "2026-04-08",
-    set due datetime to "2026-04-08T04:45:00".
+    notes = "Train Live: https://www.makemytrip.com/railways/railStatus/?q1=<train_id>&q3=<YYYY-MM-DD>"
 
-  Notes:
-    - Train Live status: https://www.makemytrip.com/railways/railStatus/?q1=<train_id>&q3=<date>
-      (replace <train_id> and <date> with actual values, date must stay YYYY-MM-DD with hyphens)
+============================================================
+STEP 2 — Google Calendar (manage_event)
+============================================================
+Create a calendar event with these exact parameters:
 
-  Example notes block:
-    "Train Live status: https://www.makemytrip.com/railways/railStatus/?q1=12787&q3=2026-04-08
+    action              = "create"
+    user_google_email   = "{user_email}"
+    calendar_id         = "primary"
 
----
+    summary             = "<train_id> | <train_name> | <source> → <destination>"
 
-## ACTION 2 — Google Calendar
+    start_time          = "<date>T<departure_time>:00" (RFC3339 Format: YYYY-MM-DDTHH:MM:SSZ)
 
-Create a calendar event with the following structure:
+    end_time            = "<date>T<arrival_time>:00" (RFC3339 Format: YYYY-MM-DDTHH:MM:SSZ) (add 1 day if arrival < departure)
 
-  Title:
-    "<train_id> | <train_name> | <source> → <destination>"
-    Example: "12787 | Hyderabad Express | Hyderabad → Mumbai"
+    description         = "Train Journey
 
-  Date:
-    The full travel date from the date field.
+                        📍 Route: <source> → <destination>
+                        🚂 Train: <train_name> (<train_id>)
+                        📅 Date: <travel_date>
+                        ⏰ Departure: <departure_time>  |  Arrival: <arrival_time>
 
-  Start time:
-    departure_time (converted to a full datetime using the travel date)
+                        🔴 Live Status: https://www.makemytrip.com/railways/railStatus/?q1=<train_id>&q3=<YYYY-MM-DD>
+                        🍽 Order Food: https://www.railrestro.com/trains/<train_name with + instead of space>?DOJ=<DDMMYYYY format of travel date>
 
-  End time:
-    arrival_time from the same _TrainInfo object.
-    If arrival_time appears to be the next day (i.e. arrival < departure numerically),
-    set end date to travel date + 1 day.
+                        ✅ Booked via Smart Travel Journey Planner
+                        "
 
-  Description:
-    Write a short, friendly travel reminder. Include:
-    - A warm send-off line (e.g. "Hope your bags are packed and you're ready to go!")
-    - Train status link: https://www.makemytrip.com/railways/railStatus/?q1=<train_id>&q3=<date>
-    - Booking link: <buy_now_link>
-    - Reliability score from recommended_train.reliability_score (formatted as percentage)
-    - The reason from recommended_train.reason
+    location            = "<source> Railway Station"
 
-  Example description:
-    "Hope your bags are packed and you're ready to roll!
+============================================================
+STEP 3 — Gmail Draft (draft_gmail_message)
+============================================================
+Create a Gmail draft with these exact parameters:
 
-     Train: 12787 – Hyderabad Express
-     Route: Hyderabad → Mumbai
-     Reliability: 94% — Consistently on time on this corridor.
+    user_google_email = "{user_email}"
+    to                = "[EMAIL_ADDRESS]"
+    subject           = "Travelling on <human-readable-date> – <source> to <destination>"
+                        Example:
+                        "Travelling on 17 April 2026 – Delhi to Mumbai"
 
-     Track your train: https://www.makemytrip.com/railways/railStatus/?q1=12787&q3=2026-04-08
-     Book your ticket: https://www.makemytrip.com/railways/..."
+    body              = "Hi,
 
-  Reminders:
-    Set a reminder 2 hours before the event start (matches the cab task due time).
+                        I'll be travelling on <human-readable-date> and may have limited availability during this time.
 
----
+                        Train: <train_name> (<train_id>)
+                        Route: <source> → <destination>
+                        Departure: <departure_time>
+          Arrival: <arrival_time>
 
-## ACTION 3 — Gmail Draft
+          I'll respond once I'm reachable.
 
-Create a DRAFT email only. Do NOT send it. The user will review and send manually.
+Thanks.
+"
 
-The email should be generic enough to work for family, friends, or a work colleague —
-the user will fill in the recipient and adjust the tone before sending.
+============================================================
+RULES
+============================================================
 
-  To:
-    Leave blank. Do not populate the recipient field.
+1. Execute ALL THREE steps even if one fails.
+2. Do NOT skip any step.
+3. Do NOT write Python. Do NOT explain — just call the tools.
+4. After all three calls complete, write a brief summary of what was done
+   (including any errors encountered).
+"""
 
-  Subject:
-    "Travelling on <date-human-readable> – <source> to <destination>"
-    Example: "Travelling on 8 April 2026 – Hyderabad to Mumbai"
-    (Use human-readable date format in the subject, not YYYY-MM-DD)
+    # Determine connection: HTTP with Bearer token (multi-user) or stdio fallback
+    if access_token:
+        try:
+            connection_params = _make_connection_params(access_token)
+            logger.info("Productivity agent using HTTP Bearer token for %s", user_email)
+        except Exception as exc:
+            logger.warning(
+                "Failed to start workspace-mcp HTTP server (%s), falling back to stdio", exc
+            )
+            connection_params = _make_stdio_params()
+    else:
+        # Fallback: stdio + --single-user (for dev/test with no session token)
+        logger.warning(
+            "No access_token for %s — using stdio single-user fallback", user_email
+        )
+        connection_params = _make_stdio_params()
 
-  Body:
-    Write a warm, neutral-toned message that works across contexts.
-    It should feel personal but not overly casual or overly formal.
-    Include all travel facts but keep the tone light.
+    return LlmAgent(
+        name="productivity_agent",
+        model="gemini-2.5-flash",
+        description=(
+            "Creates a Google Task, Calendar event, and drafts a Gmail reminder "
+            "for a confirmed train booking."
+        ),
+        instruction=_instruction,
+        tools=[PatchedMcpToolset(connection_params=connection_params)],
+    )
 
-    Structure:
-    - Opening line: a simple heads-up that you'll be travelling
-    - Travel details block: date, train, route, departure and arrival times
-    - One optional line: mention they can reach you before departure or 
-      after arrival (keeps it useful for both personal and work contexts)
-    - Closing: brief and friendly, no filler
 
-  Example body:
-    "Hi [Name],
+def _make_stdio_params() -> StdioConnectionParams:
+    """Fallback: stdio + --single-user for local dev without access_token."""
+    env = os.environ.copy()
+    args = ["--single-user"] + [a for a in WORKSPACE_MCP_ARGS if a != "--single-user"]
+    return StdioConnectionParams(
+        server_params=StdioServerParameters(
+            command=MCP_EXECUTABLE,
+            args=args,
+            env=env,
+        ),
+        timeout=90.0,
+    )
 
-     Just a heads-up — I'll be travelling on 8 April 2026 and may have 
-     limited availability during the journey.
 
-     Travel details:
-       Date      : 8 April 2026
-       Train     : 12787 – Hyderabad Express
-       Route     : Hyderabad → Mumbai
-       Departure : 06:45
-       Arrival   : 22:30
-
-     Feel free to reach me before 06:45 or after I arrive in the evening.
-
-     Thanks,
-     [Your name]"
-
-  Formatting rules for the draft:
-    - Use plain text, no HTML or markdown in the body.
-    - Date in the body must be human-readable (e.g. "8 April 2026"), 
-      not YYYY-MM-DD.
-    - Departure and arrival times in HH:MM format (24-hour or 12-hour 
-      is fine, but be consistent within the email).
-    - Keep [Name] and [Your name] as literal placeholders — the user 
-      will fill these in before sending.
-    - Do not include the train status URL or booking link in the draft —
-      this is a personal notice, not a tracking page.
-    - Do not add any AI-generated sign-offs or disclaimers.
-
----
-
-## EXECUTION RULES
-
-1. Always execute ALL THREE actions — do not skip one if another succeeds.
-2. ACTION 3 is a DRAFT only. Never call the send tool. Always use the 
-   draft/create tool exclusively for the Gmail action.
-3. If departure_time is in ISO-8601 format (contains "T"), parse it correctly 
-   before computing the 2-hour-prior cab time and before writing times in the email.
-4. The train status URL date parameter must always use YYYY-MM-DD format with 
-   hyphens. Never reformat it.
-5. The email subject and body must use human-readable dates (e.g. "8 April 2026"),
-   not the raw YYYY-MM-DD from the input.
-6. Do not ask for confirmation. Execute all three actions immediately on receiving 
-   the recommendation.
-7. After all actions complete, return a short confirmation summary:
-   - Task created: title + due datetime
-   - Event created: title + start datetime  
-   - Draft created: subject line + confirmation it was NOT sent
-
----
-
-## ERROR HANDLING
-
-If any tool call fails:
-- Retry once with corrected parameters.
-- If it fails again, complete the remaining actions anyway and report 
-  which one failed and why in your summary.
-- Never silently skip an action.
-- For ACTION 3 specifically: if the draft tool is unavailable, do NOT 
-  fall back to sending — report the failure and stop.
-""",
-    tools=[
-        PatchedMcpToolset(connection_params=connection_params)
-    ]
-)
+# ---------------------------------------------------------------------------
+# Module-level fallback instance — for ADK web / adk run / orchestrator
+# ---------------------------------------------------------------------------
+productivity_agent = get_productivity_agent()

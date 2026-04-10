@@ -19,7 +19,6 @@ data_fetching_agent = LlmAgent(
     name="data_fetching_agent",
     model="gemini-2.5-flash",
     description="Fetches live train schedules and delays from Railway MCP.",
-    input_schema=TrainQuery,
     instruction="""
 You are an expert at fetching indian railway data. 
 1. Use 'Search-trains' to find trains between the listed source and destination for the specific date.
@@ -32,7 +31,7 @@ You are an expert at fetching indian railway data.
 Do not provide advice or ranking; just fetch and return the structured data.
 """,
     tools=[
-        MCPToolset(connection_params=StreamableHTTPConnectionParams(url=TRAIN_DATA_MCP_URL))
+        MCPToolset(connection_params=StreamableHTTPConnectionParams(url=TRAIN_DATA_MCP_URL, timeout=4.0))
     ],
     output_schema=TrainDataResponse
 )

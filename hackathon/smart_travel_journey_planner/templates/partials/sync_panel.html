@@ -54,6 +54,11 @@
 <script>
     if (typeof bookNow === 'undefined') {
         window.bookNow = async function(trainId, btn) {
+            // Auth guard — redirect to login if not signed in
+            if (!window.__userSignedIn) {
+                window.location.href = '/login?next=' + (window.__loginNextUrl || encodeURIComponent(window.location.href));
+                return;
+            }
             // Remove blue borders from all cards
             document.querySelectorAll("[id^='card-']").forEach(c => c.classList.remove('border-[#0066ff]', 'ring-1', 'ring-[#0066ff]'));
             // Add blue border to selected card

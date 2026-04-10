@@ -37,13 +37,19 @@ gcloud builds submit --tag $IMAGE_URL .
 # 4. Deploy to Cloud Run
 echo "Deploying application to Cloud Run..."
 # Note: You can add --set-env-vars to inject variables from your .env file
-# For example: --set-env-vars="WORKSPACE_MCP_URL=your_url,WORKSPACE_MCP_COMMAND=your_command"
+# Source environment variables
+if [ -f .env ]; then
+    export $(grep -v '^#' .env | xargs)
+fi
+
 gcloud run deploy $APP_NAME \
     --image $IMAGE_URL \
     --region $REGION \
-    --platform managed \
     --allow-unauthenticated \
-    --service-account="deployed-sa@${PROJECT_ID}.iam.gserviceaccount.com"
+    --memory=1024Mi \
+    --port=8080 \
+    --service-account="deployed-sa@${PROJECT_ID}.iam.gserviceaccount.com" \
+    --set-env-vars="TRAIN_DATA_MCP_URL=https://railway-mcp.amithv.xyz/mcp,GOOGLE_GENAI_USE_VERTEXAI=True,GOOGLE_CLOUD_PROJECT=${PROJECT_ID},GOOGLE_CLOUD_LOCATION=${REGION},GOOGLE_OAUTH_CLIENT_ID=${GOOGLE_OAUTH_CLIENT_ID},GOOGLE_OAUTH_CLIENT_SECRET=${GOOGLE_OAUTH_CLIENT_SECRET},USER_GOOGLE_EMAIL=${USER_GOOGLE_EMAIL},OAUTHLIB_INSECURE_TRANSPORT=1"
 
 echo ""
 echo "=========================================================="
